@@ -81,4 +81,6 @@ export interface XiangqiPageActions {
   readonly onUndo: () => void | Promise<void>
   /** End the current game as a resignation. */
   readonly onResign: () => void | Promise<void>
+  /** Close the floating chess surface. */
+  readonly onExit?: () => void | Promise<void>
 }

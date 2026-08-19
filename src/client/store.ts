@@ -59,7 +59,10 @@ export function createXiangqiStore(): EngineStoreHandle<XiangqiUiState, XiangqiU
         d.busy = false
         d.error = null
       },
-      setBusy: (d, busy: boolean) => { d.busy = busy },
+      setBusy: (d, busy: boolean) => {
+        d.busy = busy
+        if (d.game !== null) d.game = { ...d.game, busy }
+      },
       setError: (d, error: string | null) => { d.error = error },
       setGame: (d, sessionId: string, state: XiangqiSerializedState, game: XiangqiGameViewModel) => {
         d.sessionId = sessionId

@@ -133,6 +133,19 @@ function exportPgn(moves: readonly XiangqiMoveRecord[]): string {
   return lines.join('\n')
 }
 
+function resultHeading(status: XiangqiGameViewModel['status']): string {
+  if (status === 'red-won') return '红方获胜'
+  if (status === 'black-won') return '黑方获胜'
+  if (status === 'draw') return '和棋'
+  return '对局结束'
+}
+
+function resultDetail(game: XiangqiGameViewModel): string {
+  if (game.status === 'resigned') return game.statusText
+  if (game.status === 'draw') return '双方势均力敌，本局以和棋结束'
+  return '精彩对局，恭喜获胜！'
+}
+
 /** Props for the visible DSH Chinese chess page. */
 export interface XiangqiPageProps extends XiangqiPageActions {
   /** Current JSON view model projected by the game/host layer. */
@@ -142,7 +155,7 @@ export interface XiangqiPageProps extends XiangqiPageActions {
 /**
  * 现代新国风 9x10 中国象棋主界面
  */
-export function XiangqiPage({ game, onMove, onNewGame, onUndo, onResign }: XiangqiPageProps) {
+export function XiangqiPage({ game, onMove, onNewGame, onUndo, onResign, onExit = () => {} }: XiangqiPageProps) {
   const [selected, setSelected] = useState<XiangqiPosition | null>(null)
   const [copySuccess, setCopySuccess] = useState(false)
   const moveListEndRef = useRef<HTMLDivElement | null>(null)
@@ -625,6 +638,40 @@ export function XiangqiPage({ game, onMove, onNewGame, onUndo, onResign }: Xiang
           </section>
         </aside>
       </div>
+
+      {game.status !== 'playing' && (
+        <div className={css.resultModalBackdrop} role="presentation">
+          <section
+            className={css.resultModal}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="xiangqi-result-title"
+          >
+            <div className={css.resultModalIcon} aria-hidden="true">🏆</div>
+            <span className={css.resultModalEyebrow}>本局结束</span>
+            <h2 className={css.resultModalTitle} id="xiangqi-result-title">
+              {resultHeading(game.status)}
+            </h2>
+            <p className={css.resultModalDetail}>{resultDetail(game)}</p>
+            <div className={css.resultModalActions}>
+              <button
+                type="button"
+                className={css.resultPrimaryButton}
+                onClick={() => { invokeAction(onNewGame) }}
+              >
+                再开一局
+              </button>
+              <button
+                type="button"
+                className={css.resultSecondaryButton}
+                onClick={() => { invokeAction(onExit) }}
+              >
+                退出
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   )
 }

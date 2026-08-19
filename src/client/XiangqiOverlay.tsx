@@ -242,6 +242,7 @@ export function createXiangqiOverlay(
       onNewGame,
       onUndo,
       onResign,
+      onExit: () => { actions.close() },
     }
 
     if (!open) return null

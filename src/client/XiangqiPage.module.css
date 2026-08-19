@@ -1104,6 +1104,119 @@
 }
 
 /* --------------------------------------------------------------------------
+   终局结果弹窗 (Result Modal)
+   -------------------------------------------------------------------------- */
+.resultModalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(7, 9, 12, 0.74);
+  backdrop-filter: blur(5px);
+}
+
+.resultModal {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  width: min(420px, calc(100vw - 32px));
+  padding: 30px 28px 26px;
+  border: 1px solid rgba(212, 175, 55, 0.42);
+  border-radius: 18px;
+  background: linear-gradient(145deg, #252b34 0%, #15191f 100%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.58), 0 0 34px rgba(212, 175, 55, 0.12);
+  text-align: center;
+}
+
+.resultModalIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(212, 175, 55, 0.55);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(212, 175, 55, 0.28), rgba(212, 175, 55, 0.06));
+  font-size: 28px;
+  box-shadow: 0 0 24px rgba(212, 175, 55, 0.18);
+}
+
+.resultModalEyebrow {
+  color: #d4af37;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+}
+
+.resultModalTitle {
+  margin: 8px 0 6px;
+  color: #ffffff;
+  font-size: 25px;
+  font-weight: 750;
+}
+
+.resultModalDetail {
+  margin: 0;
+  color: #a9b4c3;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.resultModalActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  margin-top: 24px;
+}
+
+.resultPrimaryButton,
+.resultSecondaryButton {
+  min-height: 40px;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.resultPrimaryButton {
+  border: 1px solid #34d399;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  box-shadow: 0 5px 15px rgba(16, 185, 129, 0.25);
+}
+
+.resultPrimaryButton:hover {
+  border-color: #6ee7b7;
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  transform: translateY(-1px);
+}
+
+.resultSecondaryButton {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: #d6dee9;
+}
+
+.resultSecondaryButton:hover {
+  border-color: rgba(212, 175, 55, 0.45);
+  background: rgba(212, 175, 55, 0.12);
+  color: #ffffff;
+}
+
+.resultPrimaryButton:focus-visible,
+.resultSecondaryButton:focus-visible {
+  outline: 2px solid #f1d47b;
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
    响应式断点 (Responsive Breakpoints)
    -------------------------------------------------------------------------- */
 @media (max-width: 960px) {
@@ -1152,4 +1265,3 @@
     text-align: center;
   }
 }
-

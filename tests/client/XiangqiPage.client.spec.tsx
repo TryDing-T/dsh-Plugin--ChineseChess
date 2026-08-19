@@ -167,4 +167,30 @@ describe('XiangqiPage', () => {
     expect((screen.getByRole('button', { name: /认输/ }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: /第1行第1列/ }) as HTMLButtonElement).disabled).toBe(true)
   })
+
+  it('shows a result dialog after resignation and handles restart and exit', () => {
+    const onNewGame = vi.fn()
+    const onExit = vi.fn()
+
+    render(
+      <XiangqiPage
+        game={makeGame({ status: 'resigned', statusText: '黑方获胜（对方认输）' })}
+        onMove={vi.fn()}
+        onNewGame={onNewGame}
+        onUndo={vi.fn()}
+        onResign={vi.fn()}
+        onExit={onExit}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog', { name: '对局结束' })
+    expect(dialog).toBeTruthy()
+    expect(within(dialog).getByText('黑方获胜（对方认输）')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '再开一局' }))
+    fireEvent.click(screen.getByRole('button', { name: '退出' }))
+
+    expect(onNewGame).toHaveBeenCalledTimes(1)
+    expect(onExit).toHaveBeenCalledTimes(1)
+  })
 })
