@@ -1,0 +1,24 @@
+{
+  "extends": "../../DSHarness/tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "./.tsbuildinfo.client",
+    "noUncheckedIndexedAccess": false
+  },
+  "include": [
+    "src/client",
+    "src/game",
+    "src/types.ts"
+  ],
+  "references": [
+    { "path": "../../DSHarness/vendor/cordis" },
+    { "path": "../../DSHarness/packages/client/ui-slots" },
+    { "path": "../../DSHarness/packages/client/runtime" },
+    { "path": "../../DSHarness/packages/client/ui-layout" },
+    { "path": "../../DSHarness/packages/client/ui-sidebar" },
+    { "path": "../../DSHarness/packages/api/remotes/tsconfig.client.json" },
+    { "path": "../../DSHarness/packages/session/session-projection" },
+    { "path": "../../DSHarness/packages/typert/protocol" }
+  ]
+}

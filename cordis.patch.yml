@@ -1,0 +1,4 @@
+# DSH bundle layer: load the Host service and its model tool.
+- insert:
+    - id: xiangqi
+      name: '@deepseek-ai/dsh-plugin-xiangqi'

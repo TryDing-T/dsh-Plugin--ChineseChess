@@ -1,0 +1,27 @@
+{
+  "extends": "../../DSHarness/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "./.tsbuildinfo.host",
+    "noUncheckedIndexedAccess": false
+  },
+  "include": [
+    "src/index.ts",
+    "src/types.ts",
+    "src/domain.ts",
+    "src/projection.ts",
+    "src/game",
+    "src/host"
+  ],
+  "exclude": ["src/client"],
+  "references": [
+    { "path": "../../DSHarness/vendor/cordis" },
+    { "path": "../../DSHarness/vendor/schemastery" },
+    { "path": "../../DSHarness/packages/core/agent" },
+    { "path": "../../DSHarness/packages/core/session" },
+    { "path": "../../DSHarness/packages/core/tools" },
+    { "path": "../../DSHarness/packages/session/session-projection" },
+    { "path": "../../DSHarness/packages/typert/protocol" }
+  ]
+}

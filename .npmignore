@@ -1,0 +1,7 @@
+lib/**/*.tsbuildinfo
+lib/*.tsbuildinfo
+*.tsbuildinfo
+tests
+github参考源码
+node_modules
+*.tgz

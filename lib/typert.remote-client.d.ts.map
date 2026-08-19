@@ -1,0 +1,1 @@
+{"version":3,"file":"typert.remote-client.d.ts","names":["get","move","newGame","resign","undo"],"sources":["../src/host/dsh-service.ts"],"sourcesContent":[null],"mappings":";;;;;;;;;;IAmFEA,G;IAOAC,I;IAdAC,O;IA0BAC,M;IANAC,I;;;IAbAJ,a;IAOAC,c;IAdAC,iB;IA0BAC,gB;IANAC,c;;;;;;IAbAJ,mB;IAOAC,oB;IAdAC,uB;IA0BAC,sB;IANAC,oB","ignoreList":[]}

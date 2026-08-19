@@ -1,0 +1,1 @@
+{"version":3,"file":"domain.d.ts","sourceRoot":"","sources":["../../src/domain.ts"],"names":[],"mappings":"AAAA,wEAAwE;AAExE,OAAO,KAAK,EAAE,aAAa,EAAE,MAAM,YAAY,CAAA;AAE/C,OAAO,QAAQ,gCAAgC,CAAC;IAC9C,UAAU,eAAe;QACvB,0EAA0E;QAC1E,gBAAgB,EAAE,aAAa,CAAA;KAChC;CACF;AAED,YAAY,EAAE,aAAa,EAAE,CAAA"}
