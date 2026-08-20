@@ -20,7 +20,12 @@ import { createXiangqiGameFactory } from './game-adapter.ts'
 import { createXiangqiRuntimeTool } from './runtime-tool.ts'
 import { XiangqiError, XiangqiHostService } from './service.ts'
 import type {} from '../domain.ts'
+import { registerXiangqiSessionEventType } from '../domain.ts'
 import { applyXiangqiProjection, viewXiangqiProjection, xiangqiProjectionSchema } from '../projection.ts'
+
+// Must run while the Host bundle is being loaded, before a persisted session
+// is adopted by the persistence coordinator.
+registerXiangqiSessionEventType()
 
 interface SessionGame {
   readonly service: XiangqiHostService

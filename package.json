@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-plugin-xiangqi",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "DSH 中国象棋对弈插件：侧边栏棋盘、Host 规则校验与 DSH 自动落子",
   "type": "module",
   "main": "lib/index.js",
