@@ -15,7 +15,7 @@
 需要已安装 DSH，并使用 `web` profile：
 
 ```powershell
-dsh plugin --profile web add "https://github.com/TryDing-T/dsh-Plugin--ChineseChess/archive/refs/tags/v0.1.8.tar.gz"
+dsh plugin --profile web add "https://github.com/TryDing-T/dsh-Plugin--ChineseChess/archive/refs/tags/v0.1.9.tar.gz"
 ```
 
 安装完成后重启 DSH，在左侧插件入口点击“下盘象棋”。如果你使用的不是 `web`，把 `web` 换成实际 profile 名称。
