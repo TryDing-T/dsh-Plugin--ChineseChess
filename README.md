@@ -15,7 +15,7 @@
 需要已安装 DSH，并使用 `web` profile：
 
 ```powershell
-dsh plugin --profile web add "https://github.com/TryDing-T/dsh-Plugin--ChineseChess/archive/refs/tags/v0.1.9.tar.gz"
+dsh plugin --profile web add "https://github.com/TryDing-T/dsh-Plugin--ChineseChess/archive/refs/tags/v0.1.12.tar.gz"
 ```
 
 安装完成后重启 DSH，在左侧插件入口点击“下盘象棋”。如果你使用的不是 `web`，把 `web` 换成实际 profile 名称。
@@ -38,10 +38,11 @@ dsh --profile web --dump-config | Select-String "xiangqi"
 ### 从本地安装包安装
 
 ```powershell
-npm run build
-npm pack
-dsh plugin --profile web add ".\deepseek-ai-dsh-plugin-xiangqi-0.1.9.tgz"
+npm pack --ignore-scripts
+dsh plugin --profile web add ".\deepseek-ai-dsh-plugin-xiangqi-0.1.12.tgz"
 ```
+
+仓库已提交可直接运行的 `lib` 产物。源码构建需要把插件加入与官方 DSH 源码一致的 workspace；只打本地安装包时不要触发独立目录的 `prepack`。
 
 ## 对弈方式
 

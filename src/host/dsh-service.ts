@@ -67,10 +67,13 @@ export class XiangqiService extends TypertRemoteService {
     ctx.inject(['sessionProjections'], (projectionCtx) => {
       projectionCtx.sessionProjections.register<'xiangqi', XiangqiProjection>({
         key: 'xiangqi',
-        schema: xiangqiProjectionSchema,
+        stateSchema: xiangqiProjectionSchema,
         init: () => null,
         apply: applyXiangqiProjection,
-        view: viewXiangqiProjection,
+        wire: {
+          viewSchema: xiangqiProjectionSchema,
+          view: viewXiangqiProjection,
+        },
         stateVersion: 1,
       })
     })

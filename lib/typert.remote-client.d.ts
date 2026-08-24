@@ -10,14 +10,14 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespace$7869616e677169 {
     get: (agentId: SessionId, gameId?: string) => Promise<RemoteResult<XiangqiSerializedState>>
     move: (agentId: SessionId, request: XiangqiMoveRequest) => Promise<RemoteResult<XiangqiSerializedState>>
-    newGame: (agentId: SessionId, _request?: XiangqiNewGameRequest) => Promise<RemoteResult<XiangqiSerializedState>>
+    newGame: (agentId: SessionId, _request: XiangqiNewGameRequest) => Promise<RemoteResult<XiangqiSerializedState>>
     resign: (agentId: SessionId, request: XiangqiResignRequest) => Promise<RemoteResult<XiangqiSerializedState>>
     undo: (agentId: SessionId, request: XiangqiUndoRequest) => Promise<RemoteResult<XiangqiSerializedState>>
   }
   interface TypertRemoteMap {
     'xiangqi/get': (agentId: SessionId, gameId?: string) => Promise<RemoteResult<XiangqiSerializedState>>
     'xiangqi/move': (agentId: SessionId, request: XiangqiMoveRequest) => Promise<RemoteResult<XiangqiSerializedState>>
-    'xiangqi/newGame': (agentId: SessionId, _request?: XiangqiNewGameRequest) => Promise<RemoteResult<XiangqiSerializedState>>
+    'xiangqi/newGame': (agentId: SessionId, _request: XiangqiNewGameRequest) => Promise<RemoteResult<XiangqiSerializedState>>
     'xiangqi/resign': (agentId: SessionId, request: XiangqiResignRequest) => Promise<RemoteResult<XiangqiSerializedState>>
     'xiangqi/undo': (agentId: SessionId, request: XiangqiUndoRequest) => Promise<RemoteResult<XiangqiSerializedState>>
   }
@@ -27,7 +27,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteScopeMap {
     'agent:xiangqi/get': (gameId?: string) => Promise<RemoteResult<XiangqiSerializedState>>
     'agent:xiangqi/move': (request: XiangqiMoveRequest) => Promise<RemoteResult<XiangqiSerializedState>>
-    'agent:xiangqi/newGame': (_request?: XiangqiNewGameRequest) => Promise<RemoteResult<XiangqiSerializedState>>
+    'agent:xiangqi/newGame': (_request: XiangqiNewGameRequest) => Promise<RemoteResult<XiangqiSerializedState>>
     'agent:xiangqi/resign': (request: XiangqiResignRequest) => Promise<RemoteResult<XiangqiSerializedState>>
     'agent:xiangqi/undo': (request: XiangqiUndoRequest) => Promise<RemoteResult<XiangqiSerializedState>>
   }
