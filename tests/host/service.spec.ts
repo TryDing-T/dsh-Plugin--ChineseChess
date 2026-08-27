@@ -5,6 +5,7 @@ import {
 } from '../../src/host/service.ts'
 import type {
   JsonValue,
+  XiangqiDecisionMeta,
   XiangqiGameFactory,
   XiangqiGamePort,
   XiangqiMove,
@@ -83,6 +84,38 @@ describe('XiangqiHostService', () => {
     expect(changes).toEqual(['newGame'])
   })
 
+  it('publishes DSH decision metadata only with the fenced committed move', () => {
+    const service = createService()
+    const changes: { revision: number; decision: XiangqiDecisionMeta | undefined }[] = []
+    service.subscribe(change => changes.push({ revision: change.state.revision, decision: change.decision }))
+    const created = service.newGame()
+    const meta: XiangqiDecisionMeta = {
+      source: 'dsh',
+      decisionId: 'decision-1',
+      provider: 'test-provider',
+      model: 'test-model',
+      candidateId: 'm1',
+      revision: created.revision,
+      latencyMs: 4,
+    }
+
+    const moved = service.moveWithDecision(move(created.revision), {
+      move: { from: 'a0', to: 'a1' },
+      meta,
+    })
+
+    expect(moved.revision).toBe(2)
+    expect(changes).toEqual([
+      { revision: 1, decision: undefined },
+      { revision: 2, decision: meta },
+    ])
+    expect(() => service.moveWithDecision(move(moved.revision, 'b1'), {
+      move: { from: 'a0', to: 'b1' },
+      meta,
+    })).toThrowError(/xiangqi: decision metadata does not match the move revision/)
+    expect(service.get('game-1').revision).toBe(2)
+  })
+
   it('undoes a committed move with a new revision', () => {
     const service = createService()
     service.newGame()
@@ -114,4 +147,3 @@ describe('XiangqiHostService', () => {
     expect(() => service.newGame({ sessionId: ' ' })).toThrowError(/xiangqi: sessionId must be a non-empty string/)
   })
 })
-

@@ -6,18 +6,26 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
-import type { XiangqiNewGameRequest, XiangqiSerializedState } from '../types.ts'
+import type {
+  XiangqiAiModelOverride,
+  XiangqiAiTurnRequest,
+  XiangqiAiTurnResult,
+  XiangqiDecisionTrace,
+  XiangqiNewGameRequest,
+  XiangqiRuntimeState,
+  XiangqiSerializedState,
+} from '../types.ts'
 import type { XiangqiMoveRequest, XiangqiPageActions } from './types.ts'
 import { createXiangqiStore } from './store.ts'
-import { toXiangqiGameViewModel, turnOf, ucciOf } from './view-model.ts'
+import { liveStatusTextOf, toXiangqiGameViewModel, turnOf, ucciOf } from './view-model.ts'
 import { XiangqiPage } from './XiangqiPage.tsx'
 import css from './XiangqiSlots.module.css'
-import { formatCoordinate } from '../game/coordinates.ts'
-import { findBestMoves } from '../game/ai.ts'
-import { deserialize } from '../game/serialization.ts'
 
 export interface XiangqiClientRemote {
   newGame: (sessionId: SessionId, request: XiangqiNewGameRequest) => Promise<RemoteResult<XiangqiSerializedState>>
+  get: (sessionId: SessionId, gameId?: string) => Promise<RemoteResult<XiangqiSerializedState>>
+  getRuntimeState: (sessionId: SessionId) => Promise<RemoteResult<XiangqiRuntimeState>>
+  getDecisionTrace: (sessionId: SessionId, gameId?: string) => Promise<RemoteResult<XiangqiDecisionTrace | null>>
   move: (sessionId: SessionId, request: {
     gameId: string
     revision: number
@@ -29,17 +37,20 @@ export interface XiangqiClientRemote {
     revision: number
     side: 'red' | 'black'
   }) => Promise<RemoteResult<XiangqiSerializedState>>
+  requestAiMove: (sessionId: SessionId, request: XiangqiAiTurnRequest) => Promise<RemoteResult<XiangqiAiTurnResult>>
+  cancelAiMove: (sessionId: SessionId) => Promise<RemoteResult<{ readonly cancelled: boolean }>>
 }
 
-export type PromptDshTurn = (
-  sessionId: SessionId,
-  state: XiangqiSerializedState,
-  suggestions: {
-    depth: number
-    nodes: number
-    candidates: readonly { from: string; to: string; score: number }[]
-  },
-) => Promise<void>
+/**
+ * 每次黑方请求前读取一次当前会话的模型选择快照（审查第二轮 P0）。
+ * 实现端走官方 `session.models` Remote；失败返回 null，让 Host 用自己的
+ * 会话头快照兜底，绝不阻塞对弈。
+ */
+export type XiangqiModelSelectionFetcher = (sessionId: SessionId) => Promise<XiangqiAiModelOverride | null>
+
+/** 决策进行中的轮询节奏；空闲时低频核对全局状态。 */
+const AI_PENDING_POLL_MS = 350
+const IDLE_POLL_MS = 1500
 
 export type XiangqiOverlayProps =
   PropsRuntime<'shell.overlay'>
@@ -60,7 +71,7 @@ function unwrap<T>(result: RemoteResult<T>): T {
  */
 export function createXiangqiOverlay(
   remote: XiangqiClientRemote,
-  promptDshTurn: PromptDshTurn,
+  fetchModelSelection: XiangqiModelSelectionFetcher = () => Promise.resolve(null),
 ) {
   return function XiangqiOverlay({
     useSessions,
@@ -73,24 +84,99 @@ export function createXiangqiOverlay(
     const gameId = useStore(state => state.gameId)
     const revision = useStore(state => state.revision)
     const game = useStore(state => state.game)
-  const busy = useStore(state => state.busy)
-  const error = useStore(state => state.error)
+    const decisionTrace = useStore(state => state.decisionTrace)
+    const operationBusy = useStore(state => state.operationBusy)
+    const aiPending = useStore(state => state.aiPending)
+    const error = useStore(state => state.error)
     const currentSessionId = useSessions(state => state.current)
-    const projection = useSessions(state => {
-      const current = state.current
-      return current === undefined ? undefined : state.byId[current]?.projectionValues?.xiangqi
-    })
+    const currentSessionRef = useRef<SessionId | undefined>(currentSessionId)
+    currentSessionRef.current = currentSessionId
+    // Long-interval polls read the latest view through a ref so switching
+    // intervals (busy ⇄ idle) is the only thing that re-arms the timer.
+    const viewRef = useRef({ gameId, revision, operationBusy })
+    viewRef.current = { gameId, revision, operationBusy }
     const autoStartSession = useRef<string | null>(null)
+    const operationSequence = useRef(0)
+    const beginOperation = (): number => {
+      operationSequence.current += 1
+      return operationSequence.current
+    }
+    const isCurrentOperation = (operation: number): boolean => operationSequence.current === operation
 
+    const setGameSession = (
+      current: SessionId,
+      state: XiangqiSerializedState,
+    ): void => {
+      actions.setGame(String(current), state, toXiangqiGameViewModel(state, {
+        humanSide: 'red',
+        busy: false,
+        aiPending,
+        activity: 'idle',
+      }))
+    }
+
+    const setGameForVisibleSession = (state: XiangqiSerializedState): void => {
+      const current = currentSessionRef.current
+      if (current !== undefined) setGameSession(current, state)
+    }
+
+    const getGlobalGame = async (current: SessionId): Promise<XiangqiSerializedState> =>
+      unwrap(await remote.get(current, undefined))
+
+    /**
+     * 打开期间的唯一同步通道：原子运行状态一次带回棋局、aiPending 与追踪。
+     * 决策进行中 350ms、空闲 1500ms；任何标签页的落子/取消都会被所有页面看到。
+     */
     useEffect(() => {
-      if (!open) return
-      if (currentSessionId === undefined) {
-        if (sessionId !== null) actions.clearGame()
-        return
+      if (!open || currentSessionId === undefined || sessionId !== String(currentSessionId)) return
+      let active = true
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const poll = async (): Promise<void> => {
+        try {
+          const snapshot = unwrap(await remote.getRuntimeState(currentSessionId))
+          if (!active) return
+          actions.setAiPending(snapshot.aiPending)
+          // 无条件跟随 Host：trace 为 null（新局/从未决策）时清掉本地旧链，
+          // 避免其他标签页开新局后本页仍显示上一局的决策记录。
+          actions.setDecisionTrace(snapshot.trace)
+          const view = viewRef.current
+          if (snapshot.state !== null) {
+            if (!view.operationBusy && (snapshot.state.gameId !== view.gameId || snapshot.state.revision !== view.revision)) {
+              setGameForVisibleSession(snapshot.state)
+            }
+          } else if (view.gameId !== null) {
+            // Host 进程重建过（重启/HMR）：旧棋局已随内存消失，回到待初始化状态。
+            actions.hostReset()
+          } else if (!view.operationBusy && autoStartSession.current === String(currentSessionId)) {
+            // 尚无全局棋局：与首次打开一致，显式读取会创建初始局。
+            const created = await getGlobalGame(currentSessionId)
+            if (!active) return
+            setGameForVisibleSession(created)
+          }
+        } catch {
+          // 单次轮询失败不打断界面，下一个周期自然重试。
+        }
+        if (!active) return
+        timer = setTimeout(() => { void poll() }, aiPending ? AI_PENDING_POLL_MS : IDLE_POLL_MS)
       }
-      const current = String(currentSessionId)
-      if (sessionId !== null && sessionId !== current) actions.clearGame()
-    }, [actions, currentSessionId, open, sessionId])
+      void poll()
+      return () => {
+        active = false
+        if (timer !== undefined) clearTimeout(timer)
+      }
+    }, [actions, aiPending, currentSessionId, open, sessionId])
+
+    // 决策追踪的即时首拉（打开面板时不用等第一个轮询周期）。
+    useEffect(() => {
+      if (!open || currentSessionId === undefined || gameId === null || sessionId !== String(currentSessionId)) return
+      let active = true
+      void remote.getDecisionTrace(currentSessionId, gameId)
+        .then((result) => {
+          if (active && result.ok) actions.setDecisionTrace(result.value)
+        })
+        .catch(() => { /* 诊断失败不影响棋盘 */ })
+      return () => { active = false }
+    }, [actions, currentSessionId, gameId, open, sessionId])
 
     useEffect(() => {
       if (!open || currentSessionId === undefined) {
@@ -100,68 +186,113 @@ export function createXiangqiOverlay(
       const current = String(currentSessionId)
       if (sessionId !== null && sessionId !== current) {
         autoStartSession.current = null
+        actions.attachSession(current)
         return
       }
-      // The summary has not received the plugin's projection baseline yet.
-      // Waiting here prevents a duplicate new_game during the initial sync.
-      if (projection === undefined) return
-      if (projection === null) {
+      // The Host owns one global game. Every newly opened surface reads the
+      // Host state directly instead of adopting any cached view.
+      if (sessionId === null && !operationBusy && !aiPending && autoStartSession.current !== current) {
         // A failed Remote must not turn into a tight retry loop. The retry
         // button below starts another explicit attempt after this fuse has
         // already been armed for the current session.
-        if (sessionId !== null || busy || autoStartSession.current === current) return
         autoStartSession.current = current
-        actions.setBusy(true)
-        void remote.newGame(currentSessionId, {})
-          .then(unwrap)
+        const operation = beginOperation()
+        actions.setOperationBusy(true)
+        actions.setActivity('sync')
+        actions.setError(null)
+        void getGlobalGame(currentSessionId)
           .then((state) => {
-            actions.setGame(current, state, toXiangqiGameViewModel(state, { humanSide: 'red', busy: false }))
+            if (!isCurrentOperation(operation)) return
+            setGameForVisibleSession(state)
           })
-          .catch((reason: unknown) => { actions.setError(errorText(reason)) })
-          .finally(() => { actions.setBusy(false) })
-        return
+          .catch((reason: unknown) => {
+            if (isCurrentOperation(operation)) actions.setError(errorText(reason))
+          })
+          .finally(() => {
+            if (isCurrentOperation(operation)) {
+              actions.setOperationBusy(false)
+              actions.setActivity('idle')
+            }
+          })
       }
+    }, [actions, aiPending, currentSessionId, open, operationBusy, sessionId])
 
+    /** 黑方回合统一入口：取模型快照 → 请求 DSH 决策 → 写回结果。 */
+    const runAiTurn = async (
+      current: SessionId,
+      operation: number,
+      turn: { readonly gameId: string; readonly revision: number },
+    ): Promise<void> => {
+      actions.setActivity('ai')
       try {
-        const next = toXiangqiGameViewModel(projection, { humanSide: 'red', busy })
-        const projectionIsOlder = sessionId === current
-          && revision !== null
-          && projection.revision < revision
-        if (!projectionIsOlder && (sessionId !== current || gameId !== projection.gameId || revision !== projection.revision)) {
-          actions.setGame(current, projection, next)
+        // 关键：用"这一刻"的会话模型选择作为不可变快照。用户切到模型 B 后
+        // 即使没发过聊天消息，黑棋也立即由 B 决策；off/xhigh/max 原样透传，
+        // 快照读取失败时返回 null，由 Host 会话头兜底。
+        const override = await fetchModelSelection(current).catch(() => null)
+        const result = unwrap(await remote.requestAiMove(current, {
+          gameId: turn.gameId,
+          revision: turn.revision,
+          ...(override === null ? {} : { modelOverride: override }),
+        }))
+        const latestTrace = await remote.getDecisionTrace(current, turn.gameId)
+          .then(response => response.ok ? response.value : null)
+          .catch(() => null)
+        if (latestTrace !== null) actions.setDecisionTrace(latestTrace)
+        if (!isCurrentOperation(operation)) return
+        if (result.status === 'moved') {
+          setGameForVisibleSession(result.state)
+        } else {
+          // 失败/过期都只报告原因；绝不本地兜底，也绝不改动 revision。
+          actions.setError(result.message)
         }
-        if (!projectionIsOlder && busy && (projection.phase !== 'active' || turnOf(projection) === 'red')) actions.setBusy(false)
-      } catch (reason: unknown) {
-        actions.setError(errorText(reason))
+      } finally {
+        // aiPending 的权威值由运行状态轮询维护；这里只复位本页面的操作标志。
+        if (isCurrentOperation(operation)) {
+          actions.setOperationBusy(false)
+          actions.setActivity('idle')
+        }
       }
-    }, [actions, busy, currentSessionId, gameId, open, projection, remote, revision, sessionId])
+    }
 
-    const withCurrent = (action: (current: SessionId) => Promise<void>): (() => void) => {
+    const withCurrent = (
+      action: (current: SessionId, operation: number) => Promise<void>,
+      blockWhenBusy = false,
+    ): (() => void) => {
       return () => {
         if (currentSessionId === undefined) {
           actions.setError('请先选择一个会话')
           return
         }
-        void action(currentSessionId).catch((reason: unknown) => {
-          actions.setError(errorText(reason))
-          actions.setBusy(false)
+        if (blockWhenBusy && (operationBusy || aiPending)) return
+        const operation = beginOperation()
+        void action(currentSessionId, operation).catch((reason: unknown) => {
+          if (isCurrentOperation(operation)) {
+            actions.setError(errorText(reason))
+            actions.setOperationBusy(false)
+            actions.setActivity('idle')
+          }
         })
       }
     }
 
-    const onNewGame = withCurrent(async (current) => {
-      if (busy) return
+    const onNewGame = withCurrent(async (current, operation) => {
+      if (operationBusy || aiPending) return
       autoStartSession.current = String(current)
-      actions.setBusy(true)
+      actions.setOperationBusy(true)
+      actions.setActivity('new')
       actions.setError(null)
+      actions.setDecisionTrace(null)
       const state = unwrap(await remote.newGame(current, {}))
-      actions.setGame(String(current), state, toXiangqiGameViewModel(state, { humanSide: 'red', busy: false }))
-      actions.setBusy(false)
-    })
+      if (!isCurrentOperation(operation)) return
+      setGameForVisibleSession(state)
+      actions.setOperationBusy(false)
+      actions.setActivity('idle')
+    }, true)
 
-    const onUndo = withCurrent(async (current) => {
+    const onUndo = withCurrent(async (current, operation) => {
       if (gameId === null || revision === null) throw new Error('棋局尚未同步完成')
-      actions.setBusy(true)
+      actions.setOperationBusy(true)
+      actions.setActivity('undo')
       actions.setError(null)
       let state = unwrap(await remote.undo(current, { gameId, revision }))
       // A human-facing undo rewinds the model's reply together with the
@@ -171,17 +302,22 @@ export function createXiangqiOverlay(
         if (view.moves.length === 0) break
         state = unwrap(await remote.undo(current, { gameId: state.gameId, revision: state.revision }))
       }
-      actions.setGame(String(current), state, toXiangqiGameViewModel(state, { humanSide: 'red', busy: false }))
-      actions.setBusy(false)
+      if (!isCurrentOperation(operation)) return
+      setGameForVisibleSession(state)
+      actions.setOperationBusy(false)
+      actions.setActivity('idle')
     })
 
-    const onResign = withCurrent(async (current) => {
+    const onResign = withCurrent(async (current, operation) => {
       if (gameId === null || revision === null) throw new Error('棋局尚未同步完成')
-      actions.setBusy(true)
+      actions.setOperationBusy(true)
+      actions.setActivity('sync')
       actions.setError(null)
       const state = unwrap(await remote.resign(current, { gameId, revision, side: 'red' }))
-      actions.setGame(String(current), state, toXiangqiGameViewModel(state, { humanSide: 'red', busy: false }))
-      actions.setBusy(false)
+      if (!isCurrentOperation(operation)) return
+      setGameForVisibleSession(state)
+      actions.setOperationBusy(false)
+      actions.setActivity('idle')
     })
 
     const onMoveWith = async (move: XiangqiMoveRequest): Promise<void> => {
@@ -193,42 +329,70 @@ export function createXiangqiOverlay(
         actions.setError('棋局尚未同步完成')
         return
       }
-      actions.setBusy(true)
+      if (operationBusy || aiPending) return
+      actions.setOperationBusy(true)
+      actions.setActivity('sync')
       actions.setError(null)
+      const operation = beginOperation()
       try {
         const state = unwrap(await remote.move(currentSessionId, {
           gameId,
           revision,
           move: { from: ucciOf(move.from), to: ucciOf(move.to) },
         }))
-        const next = toXiangqiGameViewModel(state, { humanSide: 'red', busy: true })
-        actions.setGame(String(currentSessionId), state, next)
+        if (!isCurrentOperation(operation)) return
+        const next = toXiangqiGameViewModel(state, { humanSide: 'red', busy: true, activity: 'ai' })
+        const visibleSession = currentSessionRef.current
+        if (visibleSession !== undefined) actions.setGame(String(visibleSession), state, next)
         if (state.phase === 'active' && next.status === 'playing' && turnOf(state) === 'black') {
-          // 候选排名留在浏览器本地，DSH 模型只需做一次决策。迭代加深 +
-          // 时间预算：固定 ~180ms 内返回，剩余预算自动挖得更深（通常 3~5 层，
-          // 含静态搜索兜底），浏览器无需等待另一个 Host Remote 往返。
-          const summary = findBestMoves(deserialize(JSON.stringify(state.gameState)), {
-            timeMs: 180,
-            depth: 6,
-            limit: 5,
-          })
-          const suggestions = {
-            depth: summary.depth,
-            nodes: summary.nodes,
-            candidates: summary.candidates.map(candidate => ({
-              from: formatCoordinate(candidate.move.from),
-              to: formatCoordinate(candidate.move.to),
-              score: candidate.score,
-            })),
-          }
-          await promptDshTurn(currentSessionId, state, suggestions)
+          await runAiTurn(currentSessionId, operation, state)
         } else {
-          actions.setBusy(false)
+          actions.setOperationBusy(false)
+          actions.setActivity('idle')
         }
       } catch (reason: unknown) {
-        actions.setError(errorText(reason))
-        actions.setBusy(false)
+        if (isCurrentOperation(operation)) {
+          actions.setError(errorText(reason))
+          actions.setOperationBusy(false)
+          actions.setActivity('idle')
+        }
       }
+    }
+
+    // 模型限流、供应商报错或网络失败后，棋盘停在黑方回合；只有 Host 确认
+    // 没有决策在跑才允许重试，仍携带原 gameId + revision，无本地兜底。
+    const onRequestAiMove = withCurrent(async (current, operation) => {
+      if (gameId === null || revision === null) throw new Error('棋局尚未同步完成')
+      if (aiPending) return
+      actions.setError(null)
+      actions.setOperationBusy(true)
+      await runAiTurn(current, operation, { gameId, revision })
+    }, true)
+
+    const onCancelAiMove = (): void => {
+      if (currentSessionId === undefined || !aiPending) return
+      // beginOperation 让发起方 runAiTurn 的收尾失效——所以这里必须自己把
+      // 本页面的操作标志复位，否则棋盘/新局/悔棋/重试会永久保持禁用。
+      beginOperation()
+      void remote.cancelAiMove(currentSessionId)
+        .then(unwrap)
+        .then(() => {
+          actions.setAiPending(false)
+          actions.setOperationBusy(false)
+          actions.setActivity('idle')
+          actions.setError(null)
+          if (gameId !== null) {
+            void remote.getDecisionTrace(currentSessionId, gameId).then((response) => {
+              if (response.ok) actions.setDecisionTrace(response.value)
+            }).catch(() => { /* 诊断失败不影响棋盘 */ })
+          }
+        })
+        .catch((reason: unknown) => {
+          actions.setError(errorText(reason))
+          // 取消失败同样解锁：Host 侧决策可能已自行结束，轮询会纠正 aiPending。
+          actions.setOperationBusy(false)
+          actions.setActivity('idle')
+        })
     }
 
     const onPageMove = (move: XiangqiMoveRequest): void => {
@@ -237,12 +401,20 @@ export function createXiangqiOverlay(
       void onMoveWith(move)
     }
 
+    const onExit = (): void => {
+      // Closing only hides the floating surface. The process-global game and
+      // in-flight DSH decision continue; reopening reads the same state.
+      actions.close()
+    }
+
     const pageActions: XiangqiPageActions = {
       onMove: onPageMove,
       onNewGame,
       onUndo,
       onResign,
-      onExit: () => { actions.close() },
+      onCancelAiMove,
+      onRequestAiMove,
+      onExit,
     }
 
     if (!open) return null
@@ -266,13 +438,13 @@ export function createXiangqiOverlay(
               >
                 {minimized ? '恢复棋盘' : '最小化'}
               </button>
-              <button type="button" className={css.closeButton} onClick={() => { actions.close() }}>关闭棋盘</button>
+              <button type="button" className={css.closeButton} onClick={onExit}>关闭棋盘</button>
             </div>
           </div>
           {minimized ? (
             <div className={css.minimizedSummary}>
-              <span className={css.minimizedDot} data-busy={busy || undefined} aria-hidden="true" />
-              <span>{game === null ? '棋局未准备' : game.statusText}</span>
+              <span className={css.minimizedDot} data-busy={operationBusy || aiPending || undefined} aria-hidden="true" />
+              <span>{game === null ? '棋局未准备' : liveStatusTextOf(game)}</span>
             </div>
           ) : (
             <>
@@ -281,12 +453,12 @@ export function createXiangqiOverlay(
               )}
               {currentSessionId !== undefined && game === null && (
                 <div className={css.emptyState}>
-                  <p>{projection === undefined ? '正在同步棋局……' : '正在准备棋局……'}</p>
+                  <p>正在准备棋局……</p>
                   {error !== null && <p className={css.errorText} role="alert">{error}</p>}
                   <button type="button" className={css.retryButton} onClick={onNewGame}>重新开局</button>
                 </div>
               )}
-              {game !== null && <XiangqiPage game={game} {...pageActions} />}
+              {game !== null && <XiangqiPage game={game} decisionTrace={decisionTrace} {...pageActions} />}
               {error !== null && game !== null && <p className={css.inlineError} role="alert">{error}</p>}
             </>
           )}

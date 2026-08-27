@@ -1,4 +1,3 @@
 /** Host-side aliases kept separate so the Typert service signature is easy to audit. */
-export type { XiangqiMoveRequest, XiangqiNewGameRequest, XiangqiResignRequest, XiangqiSerializedState, XiangqiUndoRequest, } from './types.ts';
-export type { XiangqiToolArgs, XiangqiToolResult } from './dsh-tool.ts';
+export type { XiangqiMoveRequest, XiangqiNewGameRequest, XiangqiResignRequest, XiangqiSerializedState, XiangqiUndoRequest, XiangqiAiTurnRequest, XiangqiAiTurnResult, } from '../types.ts';
 //# sourceMappingURL=dsh-service-types.d.ts.map

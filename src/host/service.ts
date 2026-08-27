@@ -2,6 +2,7 @@ import type {
   JsonValue,
   XiangqiChange,
   XiangqiChangeListener,
+  XiangqiDecisionMeta,
   XiangqiGameFactory,
   XiangqiGameIdFactory,
   XiangqiGamePhase,
@@ -18,6 +19,7 @@ import type {
 export type XiangqiErrorCode =
   | 'INVALID_INPUT'
   | 'GAME_NOT_FOUND'
+  | 'GAME_NOT_CURRENT'
   | 'STALE_REVISION'
   | 'GAME_NOT_ACTIVE'
   | 'NO_UNDO'
@@ -26,6 +28,7 @@ export type XiangqiErrorCode =
   | 'GAME_RESTORE'
   | 'GAME_SERIALIZE'
   | 'GAME_RULE'
+  | 'INVALID_DECISION'
 
 /** All command-layer failures have the stable `xiangqi:` prefix. */
 export class XiangqiError extends Error {
@@ -121,6 +124,20 @@ function otherSide(side: XiangqiSide): XiangqiSide {
 }
 
 /**
+ * 写操作防串局守卫（审查问题 2）：任何针对非当前全局棋局的写请求一律拒绝。
+ * 没有它，旧棋局的延迟/重复请求会把自己的 gameId 重新发布成"当前棋局"，
+ * 让新开的棋局被旧局面覆盖。
+ */
+export function assertCurrentGame(currentGameId: string | undefined, requestedGameId: string): void {
+  if (currentGameId !== undefined && requestedGameId !== currentGameId) {
+    throw new XiangqiError(
+      'GAME_NOT_CURRENT',
+      `game "${requestedGameId}" is not the current game "${currentGameId}"; open or create the current game instead`,
+    )
+  }
+}
+
+/**
  * Host-owned command service for one or more DSH/session chess games.
  *
  * It owns lifecycle, revision checks, transactional restore-before-commit,
@@ -205,6 +222,24 @@ export class XiangqiHostService {
 
   /** Apply one move against an exact revision and publish only after commit. */
   move(request: XiangqiMoveRequest): XiangqiSerializedState {
+    return this.commitMove(request)
+  }
+
+  /** Apply a previously validated DSH decision against the same revision fence. */
+  moveWithDecision(
+    request: XiangqiMoveRequest,
+    decision: { readonly move: XiangqiMove; readonly meta: XiangqiDecisionMeta },
+  ): XiangqiSerializedState {
+    if (decision.meta.source !== 'dsh' || decision.meta.revision !== request.revision) {
+      throw new XiangqiError('INVALID_DECISION', 'decision metadata does not match the move revision')
+    }
+    return this.commitMove(request, decision.meta)
+  }
+
+  private commitMove(
+    request: XiangqiMoveRequest,
+    decision?: XiangqiDecisionMeta,
+  ): XiangqiSerializedState {
     const record = this.requireGame(request.gameId)
     this.assertRevision(record, request.revision)
     this.assertActive(record)
@@ -225,7 +260,7 @@ export class XiangqiHostService {
     record.gameState = nextGameState
     record.lastMove = move
     record.revision += 1
-    return this.commitAndPublish('move', record)
+    return this.commitAndPublish('move', record, decision)
   }
 
   /** Restore the last committed position against an exact revision. */
@@ -273,6 +308,23 @@ export class XiangqiHostService {
   subscribe(listener: XiangqiChangeListener): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
+  }
+
+  /**
+   * Drop every game record except the named one and report how many were
+   * removed. Called after a new game becomes current so stale games can never
+   * be mutated back into existence.
+   */
+  retainOnly(gameId: string): number {
+    const id = requireText(gameId, 'gameId')
+    let removed = 0
+    for (const key of [...this.games.keys()]) {
+      if (key !== id) {
+        this.games.delete(key)
+        removed += 1
+      }
+    }
+    return removed
   }
 
   private serialize(game: { serialize(): JsonValue }): JsonValue {
@@ -339,11 +391,16 @@ export class XiangqiHostService {
   private commitAndPublish(
     operation: XiangqiChange['operation'],
     record: GameRecord,
+    decision?: XiangqiDecisionMeta,
   ): XiangqiSerializedState {
     // The record has already been mutated before this method is entered. This
     // ordering is intentional: observers can only see successful commits.
     const state = this.snapshot(record)
-    const change: XiangqiChange = { operation, state }
+    const change: XiangqiChange = {
+      operation,
+      state,
+      ...decision === undefined ? {} : { decision },
+    }
     for (const listener of [...this.listeners]) listener(change)
     return state
   }

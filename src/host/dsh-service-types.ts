@@ -6,6 +6,6 @@ export type {
   XiangqiResignRequest,
   XiangqiSerializedState,
   XiangqiUndoRequest,
-} from './types.ts'
-
-export type { XiangqiToolArgs, XiangqiToolResult } from './dsh-tool.ts'
+  XiangqiAiTurnRequest,
+  XiangqiAiTurnResult,
+} from '../types.ts'

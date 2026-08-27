@@ -3,21 +3,29 @@ import type {
   RemoteResult,
   TypertRemoteContribution,
 } from '@deepseek-ai/dsh-typert-protocol'
-import type { XiangqiMoveRequest, XiangqiNewGameRequest, XiangqiResignRequest, XiangqiSerializedState, XiangqiUndoRequest } from '@deepseek-ai/dsh-plugin-xiangqi/types'
+import type { XiangqiAiTurnRequest, XiangqiAiTurnResult, XiangqiDecisionTrace, XiangqiMoveRequest, XiangqiNewGameRequest, XiangqiResignRequest, XiangqiRuntimeState, XiangqiSerializedState, XiangqiUndoRequest } from '@deepseek-ai/dsh-plugin-xiangqi/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespace$7869616e677169 {
+    cancelAiMove: (agentId: SessionId) => Promise<RemoteResult<{ readonly cancelled: boolean; }>>
     get: (agentId: SessionId, gameId?: string) => Promise<RemoteResult<XiangqiSerializedState>>
+    getDecisionTrace: (agentId: SessionId, gameId?: string) => Promise<RemoteResult<XiangqiDecisionTrace | null>>
+    getRuntimeState: (agentId: SessionId) => Promise<RemoteResult<XiangqiRuntimeState>>
     move: (agentId: SessionId, request: XiangqiMoveRequest) => Promise<RemoteResult<XiangqiSerializedState>>
     newGame: (agentId: SessionId, _request: XiangqiNewGameRequest) => Promise<RemoteResult<XiangqiSerializedState>>
+    requestAiMove: (agentId: SessionId, request: XiangqiAiTurnRequest) => Promise<RemoteResult<XiangqiAiTurnResult>>
     resign: (agentId: SessionId, request: XiangqiResignRequest) => Promise<RemoteResult<XiangqiSerializedState>>
     undo: (agentId: SessionId, request: XiangqiUndoRequest) => Promise<RemoteResult<XiangqiSerializedState>>
   }
   interface TypertRemoteMap {
+    'xiangqi/cancelAiMove': (agentId: SessionId) => Promise<RemoteResult<{ readonly cancelled: boolean; }>>
     'xiangqi/get': (agentId: SessionId, gameId?: string) => Promise<RemoteResult<XiangqiSerializedState>>
+    'xiangqi/getDecisionTrace': (agentId: SessionId, gameId?: string) => Promise<RemoteResult<XiangqiDecisionTrace | null>>
+    'xiangqi/getRuntimeState': (agentId: SessionId) => Promise<RemoteResult<XiangqiRuntimeState>>
     'xiangqi/move': (agentId: SessionId, request: XiangqiMoveRequest) => Promise<RemoteResult<XiangqiSerializedState>>
     'xiangqi/newGame': (agentId: SessionId, _request: XiangqiNewGameRequest) => Promise<RemoteResult<XiangqiSerializedState>>
+    'xiangqi/requestAiMove': (agentId: SessionId, request: XiangqiAiTurnRequest) => Promise<RemoteResult<XiangqiAiTurnResult>>
     'xiangqi/resign': (agentId: SessionId, request: XiangqiResignRequest) => Promise<RemoteResult<XiangqiSerializedState>>
     'xiangqi/undo': (agentId: SessionId, request: XiangqiUndoRequest) => Promise<RemoteResult<XiangqiSerializedState>>
   }
@@ -25,9 +33,13 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'xiangqi': TypertRemoteNamespace$7869616e677169
   }
   interface TypertRemoteScopeMap {
+    'agent:xiangqi/cancelAiMove': () => Promise<RemoteResult<{ readonly cancelled: boolean; }>>
     'agent:xiangqi/get': (gameId?: string) => Promise<RemoteResult<XiangqiSerializedState>>
+    'agent:xiangqi/getDecisionTrace': (gameId?: string) => Promise<RemoteResult<XiangqiDecisionTrace | null>>
+    'agent:xiangqi/getRuntimeState': () => Promise<RemoteResult<XiangqiRuntimeState>>
     'agent:xiangqi/move': (request: XiangqiMoveRequest) => Promise<RemoteResult<XiangqiSerializedState>>
     'agent:xiangqi/newGame': (_request: XiangqiNewGameRequest) => Promise<RemoteResult<XiangqiSerializedState>>
+    'agent:xiangqi/requestAiMove': (request: XiangqiAiTurnRequest) => Promise<RemoteResult<XiangqiAiTurnResult>>
     'agent:xiangqi/resign': (request: XiangqiResignRequest) => Promise<RemoteResult<XiangqiSerializedState>>
     'agent:xiangqi/undo': (request: XiangqiUndoRequest) => Promise<RemoteResult<XiangqiSerializedState>>
   }
@@ -35,4 +47,3 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 
 export declare const TYPERT_REMOTE: TypertRemoteContribution
 export default TYPERT_REMOTE
-//# sourceMappingURL=typert.remote-client.d.ts.map

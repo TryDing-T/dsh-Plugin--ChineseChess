@@ -1,23 +1,28 @@
-/** Browser half: sidebar action, frame overlay, fast candidate search, and DSH turn prompt. */
+/** Browser half: sidebar action, frame overlay, and generated DSH Remote bridge. */
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import xiangqiRemote from '@deepseek-ai/dsh-plugin-xiangqi/remote'
 import type {} from '@deepseek-ai/dsh-plugin-xiangqi/remote'
-import { createXiangqiOverlay, type XiangqiClientRemote } from './XiangqiOverlay.tsx'
-import type { PromptDshTurn } from './XiangqiOverlay.tsx'
+import type { XiangqiAiModelOverride } from '../types.ts'
+import {
+  createXiangqiOverlay,
+  type XiangqiClientRemote,
+  type XiangqiModelSelectionFetcher,
+} from './XiangqiOverlay.tsx'
 import { XiangqiSidebarAction } from './SidebarAction.tsx'
 import { createXiangqiStore } from './store.ts'
-import { deserialize, toFen } from '../game/serialization.ts'
 
 export { XiangqiBoard, XiangqiPage } from './XiangqiPage.tsx'
 export type { XiangqiPageProps } from './XiangqiPage.tsx'
-export { toXiangqiGameViewModel, turnOf, ucciOf } from './view-model.ts'
+export { liveStatusTextOf, toXiangqiGameViewModel, turnOf, ucciOf } from './view-model.ts'
 export { createXiangqiStore } from './store.ts'
 export { createXiangqiOverlay } from './XiangqiOverlay.tsx'
-export type { XiangqiClientRemote, XiangqiOverlayProps, PromptDshTurn } from './XiangqiOverlay.tsx'
+export type { XiangqiClientRemote, XiangqiModelSelectionFetcher, XiangqiOverlayProps } from './XiangqiOverlay.tsx'
 export {
   XIANGQI_COLUMNS,
   XIANGQI_ROWS,
@@ -35,8 +40,52 @@ export type {
   XiangqiSide,
 } from './types.ts'
 
-/** The outer Client plugin only owns the generated Remote contribution. */
-export const inject = ['remote']
+/**
+ * The outer Client plugin mounts the generated Remote and reads the official
+ * session model-selection face; the UI itself runs in a child fiber.
+ */
+export const inject = ['remote', 'connection']
+
+/** The slice of the official connection face this plugin consumes. */
+interface ModelSelectionConnectionFace {
+  readonly api?: {
+    readonly sessions?: {
+      readonly models?: (request: { readonly sessionId: SessionId }) => Promise<{
+        readonly result: RemoteResult<{ readonly current: {
+          readonly provider: string
+          readonly model: string
+          readonly reasoningEffort?: string
+        } | null }>
+      }>
+    }
+  }
+}
+
+/**
+ * 每次黑方请求前的模型快照（审查第二轮 P0）：走官方 `session.models`
+ * Remote 读"下一步将使用的 provider/model/reasoningEffort"。任何失败都
+ * 返回 null，让 Host 用自己的会话头快照兜底；绝不阻塞、绝不猜测。
+ */
+function createModelSelectionFetcher(ctx: ClientContext): XiangqiModelSelectionFetcher {
+  return async (sessionId): Promise<XiangqiAiModelOverride | null> => {
+    const connection = ctx.get('connection') as unknown as ModelSelectionConnectionFace | undefined
+    const models = connection?.api?.sessions?.models
+    if (models === undefined) return null
+    const { result } = await models({ sessionId })
+    if (!result.ok) return null
+    const current = result.value.current
+    if (current === null) return null
+    const provider = current.provider.trim()
+    const model = current.model.trim()
+    if (provider.length === 0 || model.length === 0) return null
+    const effort = current.reasoningEffort?.trim()
+    return {
+      provider,
+      model,
+      ...(effort === undefined || effort.length === 0 ? {} : { reasoningEffort: effort }),
+    }
+  }
+}
 
 /** Mount the Host Remote, then activate the UI in a child with the exact namespace injection. */
 export async function apply(ctx: ClientContext): Promise<void> {
@@ -47,7 +96,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // ctx.remote.xiangqi from this outer fiber would violate the injection guard,
   // while declaring it in the outer `inject` would deadlock before $mount runs.
   // Park the UI in a child fiber that starts only after the namespace exists.
-  await ctx.inject(['slots', 'sessions', 'remote', 'remote.xiangqi'], (uiCtx) => {
+  await ctx.inject(['slots', 'sessions', 'remote', 'remote.xiangqi', 'connection'], (uiCtx) => {
     applyXiangqiUi(uiCtx)
   })
 }
@@ -59,21 +108,7 @@ function applyXiangqiUi(ctx: ClientContext): void {
   // stable across Loader-owned child fibers; chained property access is not.
   const remote = ctx.get('remote.xiangqi') as unknown as XiangqiClientRemote | undefined
   if (remote === undefined) throw new Error('象棋 Remote 挂载后仍不可用')
-  const promptDshTurn: PromptDshTurn = async (sessionId, state, suggestions) => {
-    const session = ctx.sessions.binding(sessionId)?.session
-    if (session === undefined) throw new Error('当前会话不可用，无法让 DSH 落子')
-    const fen = toFen(deserialize(JSON.stringify(state.gameState)))
-    const candidateText = suggestions.candidates.length === 0
-      ? '无候选走法，请根据 FEN 选择一手合法黑方棋。'
-      : suggestions.candidates
-        .map((candidate, index) => `${index + 1}. ${candidate.from}-${candidate.to}（${candidate.score}）`)
-        .join('；')
-    const result = await session.prompt([{
-      type: 'text',
-      text: `你正在和用户进行中国象棋对弈，当前轮到黑方。请结合当前 FEN 和本地引擎候选，快速判断并立即调用一次 xiangqi_game。禁止 get、new_game、undo、resign，禁止长篇解释；只允许 action="move"，必须使用 game_id="${state.gameId}"、revision=${state.revision}，从候选中选择或修正为一手合法黑方棋。\n当前 FEN：${fen}\n本地引擎候选（深度 ${suggestions.depth}，搜索 ${suggestions.nodes} 个节点）：${candidateText}`,
-    }], 'queue')
-    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-  }
+  const fetchModelSelection = createModelSelectionFetcher(ctx)
 
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',
@@ -81,7 +116,7 @@ function applyXiangqiUi(ctx: ClientContext): void {
     store,
   }, XiangqiSidebarAction))
 
-  const Overlay = createXiangqiOverlay(remote, promptDshTurn)
+  const Overlay = createXiangqiOverlay(remote, fetchModelSelection)
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
     id: 'xiangqi-overlay',

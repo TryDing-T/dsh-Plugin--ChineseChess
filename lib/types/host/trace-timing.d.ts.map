@@ -1,0 +1,1 @@
+{"version":3,"file":"trace-timing.d.ts","sourceRoot":"","sources":["../../../src/host/trace-timing.ts"],"names":[],"mappings":"AAAA;;;GAGG;AAEH,OAAO,KAAK,EAAE,yBAAyB,EAAE,MAAM,aAAa,CAAA;AAI5D,kBAAkB;AAClB,wBAAgB,eAAe,CAAC,KAAK,EAAE,yBAAyB,GAAG,OAAO,CAEzE;AAED;;;GAGG;AACH,wBAAgB,eAAe,CAAC,SAAS,EAAE,MAAM,EAAE,OAAO,EAAE,MAAM,GAAG,SAAS,EAAE,GAAG,EAAE,MAAM,GAAG,MAAM,CAEnG"}

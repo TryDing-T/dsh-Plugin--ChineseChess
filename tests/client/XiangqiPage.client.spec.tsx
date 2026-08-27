@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { XiangqiPage } from '../../src/client/XiangqiPage.tsx'
+import type { XiangqiDecisionTrace } from '../../src/types.ts'
 import type {
   XiangqiGameViewModel,
   XiangqiMoveRecord,
@@ -154,6 +155,45 @@ describe('XiangqiPage', () => {
     expect(screen.getByText('AI 正在计算下一步')).toBeTruthy()
     expect(screen.getByText('2 步')).toBeTruthy()
     expect(screen.getAllByText('卒３进１').length).toBeGreaterThan(0)
+  })
+
+  it('shows observable DSH progress and can cancel a stuck decision', () => {
+    const onCancelAiMove = vi.fn()
+    const trace: XiangqiDecisionTrace = {
+      decisionId: 'decision-1',
+      gameId: 'game-1',
+      revision: 1,
+      phase: 'receiving',
+      phaseText: 'DSH 已开始返回流式输出',
+      provider: 'deepseek',
+      model: 'deepseek-reasoner',
+      reasoningEffort: 'high',
+      elapsedMs: 1234,
+      outputChars: 0,
+      reasoningDeltaCount: 4,
+      entries: [
+        { id: 1, speaker: 'host', kind: 'request', text: '发送给 DSH：黑方当前局面。', elapsedMs: 10 },
+        { id: 2, speaker: 'dsh', kind: 'status', text: 'DSH 已开始输出。', elapsedMs: 1234 },
+      ],
+    }
+
+    render(
+      <XiangqiPage
+        game={makeGame({ currentTurn: 'black', busy: true })}
+        decisionTrace={trace}
+        onMove={vi.fn()}
+        onNewGame={vi.fn()}
+        onUndo={vi.fn()}
+        onResign={vi.fn()}
+        onCancelAiMove={onCancelAiMove}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'DSH 决策链' })).toBeTruthy()
+    expect(screen.getByText('发送给 DSH：黑方当前局面。')).toBeTruthy()
+    expect(screen.getByText('DSH 已开始返回流式输出')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '停止思考' }))
+    expect(onCancelAiMove).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the page controls available in a narrow viewport and disables ended games', () => {

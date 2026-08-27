@@ -4,6 +4,8 @@ import {
   boardCodesOf,
   boardWithKings,
   containsDestination,
+  deserialize,
+  emptyBoard,
   getLegalMoves,
   historyOf,
   initialBoard,
@@ -11,6 +13,7 @@ import {
   newGame,
   pieceAt,
   put,
+  serialize,
   square,
   turnOf,
 } from './game-api.ts'
@@ -107,6 +110,41 @@ describe('中国象棋规则内核', () => {
       to: { x: 0, y: 0 },
     }
     expect(() => applyMove(initial, offBoardMove.from, offBoardMove.to)).toThrow()
+  })
+
+  it('scores stalemate as a loss for the side to move (中国象棋困毙判负)', () => {
+    // 黑将 e0；过河红兵 d1 直进控制 d0、平移控制 e1；
+    // 对称的红兵 f1 控制 f0 与 e1。三个候选点全被封死，
+    // 而 e0 本身不受任何攻击（未被将军）→ 困毙。
+    const board = emptyBoard()
+    put(board, 'e0', 'k')
+    put(board, 'd1', 'P')
+    put(board, 'f1', 'P')
+    put(board, 'd9', 'K')
+    const state = newCustomGame(board, 'black')
+
+    expect(getLegalMoves(state, square('e0'))).toHaveLength(0)
+    // 困毙不是和棋：轮走方直接判负，获胜方是红方。
+    // （status/winner 是运行时派生字段，不在序列化 JSON 里，反序列化时会重算。）
+    expect(state.status).toBe('stalemate')
+    expect(state.winner).toBe('red')
+    expect(state.inCheck).toBe(false)
+    // 序列化往返（对应 Host 存档恢复路径）后判定保持一致。
+    const restored = deserialize(serialize(state)) as unknown as Record<string, unknown>
+    expect(restored.status).toBe('stalemate')
+    expect(restored.winner).toBe('red')
+
+    // 对照：同样无子可走但被将军时是"将死"，语义同为负。
+    // 黑将 d0 被 d5 红车将军；e0/d1 分别被 d5/e1 红车控制，c0 在九宫外。
+    const mateBoard = emptyBoard()
+    put(mateBoard, 'd0', 'k')
+    put(mateBoard, 'e1', 'R')
+    put(mateBoard, 'd5', 'R')
+    put(mateBoard, 'f9', 'K')
+    const mateState = newCustomGame(mateBoard, 'black')
+    expect(getLegalMoves(mateState, square('d0'))).toHaveLength(0)
+    expect(mateState.status).toBe('checkmate')
+    expect(mateState.winner).toBe('red')
   })
 })
 

@@ -730,6 +730,44 @@
   font-size: 12px;
 }
 
+/* DSH 落子失败后的重试行：固定出现在状态卡片下方，仅在黑方待落子时渲染。 */
+.retryAiRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 680px);
+  margin: 10px auto 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(180, 83, 9, 0.12);
+  border: 1px solid rgba(251, 146, 60, 0.35);
+}
+
+.retryAiButton {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(251, 146, 60, 0.55);
+  background: linear-gradient(135deg, rgba(251, 146, 60, 0.9), rgba(217, 119, 6, 0.9));
+  color: #fff7ed;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.retryAiButton:hover {
+  filter: brightness(1.08);
+}
+
+.retryAiButton:active {
+  transform: translateY(1px);
+}
+
+.retryAiHint {
+  color: #fdba74;
+  font-size: 12px;
+}
+
 /* --------------------------------------------------------------------------
    右侧面板与走法列表 (Side Column & Move List)
    -------------------------------------------------------------------------- */
@@ -746,6 +784,172 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(12px);
+}
+
+/* DSH 决策链面板：让模型请求真正有可观察的中间态。 */
+.tracePanel {
+  min-height: 280px;
+  padding: 16px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(21, 31, 39, 0.92) 0%, rgba(14, 19, 25, 0.92) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+}
+
+.traceHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tracePhase {
+  max-width: 190px;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  color: #6ee7b7;
+  font-size: 10px;
+  line-height: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tracePhase[data-phase='failed'] {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+.tracePhase[data-phase='cancelled'] {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.3);
+  color: #cbd5e1;
+}
+
+.tracePhase[data-phase='completed'] {
+  background: rgba(212, 175, 55, 0.13);
+  border-color: rgba(212, 175, 55, 0.32);
+  color: #f1d47b;
+}
+
+.traceCancelButton {
+  flex: none;
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.traceCancelButton:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+.traceMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  margin-bottom: 10px;
+  color: #94a3b8;
+  font-size: 10.5px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.traceList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 290px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0 4px 0 0;
+  list-style: none;
+  scroll-behavior: smooth;
+}
+
+.traceList::-webkit-scrollbar {
+  width: 5px;
+}
+
+.traceList::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.22);
+  border-radius: 4px;
+}
+
+.traceMessage {
+  padding: 8px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.traceMessage[data-speaker='dsh'] {
+  background: rgba(16, 185, 129, 0.07);
+  border-color: rgba(16, 185, 129, 0.18);
+}
+
+.traceMessage[data-kind='error'] {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.traceMessageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.traceSpeaker {
+  color: #d4af37;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.traceMessage[data-speaker='dsh'] .traceSpeaker {
+  color: #6ee7b7;
+}
+
+.traceMessage time {
+  color: #64748b;
+  font-size: 9.5px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.traceMessage p {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 11.5px;
+  line-height: 17px;
+  overflow-wrap: anywhere;
+}
+
+.traceEmpty,
+.traceFootnote {
+  color: #64748b;
+  font-size: 11.5px;
+  line-height: 18px;
+}
+
+.traceEmpty {
+  padding: 54px 10px;
+  text-align: center;
+}
+
+.traceFootnote {
+  margin: 9px 0 0;
+  color: #64748b;
+  font-size: 10px;
 }
 
 .panelHeader {

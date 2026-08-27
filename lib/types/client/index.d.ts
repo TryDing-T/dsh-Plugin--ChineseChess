@@ -1,14 +1,17 @@
-/** Browser half: sidebar action, frame overlay, fast candidate search, and DSH turn prompt. */
+/** Browser half: sidebar action, frame overlay, and generated DSH Remote bridge. */
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client';
 export { XiangqiBoard, XiangqiPage } from './XiangqiPage.tsx';
 export type { XiangqiPageProps } from './XiangqiPage.tsx';
-export { toXiangqiGameViewModel, turnOf, ucciOf } from './view-model.ts';
+export { liveStatusTextOf, toXiangqiGameViewModel, turnOf, ucciOf } from './view-model.ts';
 export { createXiangqiStore } from './store.ts';
 export { createXiangqiOverlay } from './XiangqiOverlay.tsx';
-export type { XiangqiClientRemote, XiangqiOverlayProps, PromptDshTurn } from './XiangqiOverlay.tsx';
+export type { XiangqiClientRemote, XiangqiModelSelectionFetcher, XiangqiOverlayProps } from './XiangqiOverlay.tsx';
 export { XIANGQI_COLUMNS, XIANGQI_ROWS, } from './types.ts';
 export type { XiangqiGameStatus, XiangqiGameViewModel, XiangqiLegalMove, XiangqiMoveRecord, XiangqiMoveRequest, XiangqiPageActions, XiangqiPiece, XiangqiPieceKind, XiangqiPosition, XiangqiSide, } from './types.ts';
-/** The outer Client plugin only owns the generated Remote contribution. */
+/**
+ * The outer Client plugin mounts the generated Remote and reads the official
+ * session model-selection face; the UI itself runs in a child fiber.
+ */
 export declare const inject: string[];
 /** Mount the Host Remote, then activate the UI in a child with the exact namespace injection. */
 export declare function apply(ctx: ClientContext): Promise<void>;

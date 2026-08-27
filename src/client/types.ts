@@ -45,8 +45,11 @@ export interface XiangqiMoveRecord extends XiangqiLegalMove {
   readonly captured?: XiangqiPieceKind
 }
 
-/** The lifecycle state exposed by the game projection. */
-export type XiangqiGameStatus = 'playing' | 'red-won' | 'black-won' | 'draw' | 'resigned'
+/** The lifecycle state exposed by the game projection. 中国象棋无和棋困毙，终局均有胜方。 */
+export type XiangqiGameStatus = 'playing' | 'red-won' | 'black-won' | 'resigned'
+
+/** 当前 Overlay 正在执行的后台动作，用于把状态文案与"AI 思考中"区分开。 */
+export type XiangqiActivity = 'idle' | 'ai' | 'undo' | 'new' | 'sync'
 
 /**
  * JSON-friendly view model consumed by the client page.
@@ -66,6 +69,10 @@ export interface XiangqiGameViewModel {
   readonly lastMove?: XiangqiLegalMove
   readonly inCheck?: boolean
   readonly busy?: boolean
+  /** Host 确实存在黑方决策（跨页面权威值）；与本页面 operationBusy 区分。 */
+  readonly aiPending?: boolean
+  /** 与 busy 配合展示的细粒度动作标签；缺省按 idle 处理。 */
+  readonly activity?: XiangqiActivity
 }
 
 /** Payload passed to the host/game callback after a legal destination click. */
@@ -81,6 +88,10 @@ export interface XiangqiPageActions {
   readonly onUndo: () => void | Promise<void>
   /** End the current game as a resignation. */
   readonly onResign: () => void | Promise<void>
+  /** Cancel the in-flight DSH decision without changing the board revision. */
+  readonly onCancelAiMove?: () => void | Promise<void>
+  /** Re-request the DSH move after a failed or cancelled black-side decision. */
+  readonly onRequestAiMove?: () => void | Promise<void>
   /** Close the floating chess surface. */
   readonly onExit?: () => void | Promise<void>
 }

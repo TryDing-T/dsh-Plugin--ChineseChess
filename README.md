@@ -1,12 +1,16 @@
 # DSH 中国象棋插件
 
-在 DeepSeek Harness（DSH）Web 界面中打开独立的中国象棋棋盘，与 DSH 当前会话的模型对弈。
+在 DeepSeek Harness（DSH）Web 界面中打开独立的中国象棋棋盘，与 DSH 模型对弈。
 
 - 用户执红方，DSH 执黑方。
 - 棋盘是标准 9×10 布局，楚河汉界、九宫和棋子初始位置完整保留。
 - Host 端负责棋规、合法性、轮次和版本校验，客户端只负责交互展示。
-- 红方落子后，浏览器先做快速候选搜索，再交给当前 DSH 模型做最终判断。
-- 支持当前会话模型选择器、最小化棋盘、悔棋、新局、认输和棋谱复制。
+- 棋局只保存在 DSH Host 进程内存里，**不写入任何用户任务会话历史**；切换 DSH 聊天不会重开棋局，
+  DSH 重启或插件重载后自然回到未开局状态，下次打开直接创建新局。
+- 黑方决策走 Host 后台轻量调用：每次落子前读取当前会话的模型选择快照（provider/model/思考程度），
+  用户切换模型后无需先发聊天消息即可生效。
+- 支持最小化棋盘、悔棋、新局、认输和棋谱复制；模型请求失败后可一键"重新请求 DSH 落子"。
+- 多个标签页/窗口共享同一份全局棋局与 AI 状态：任一页面都能看到"AI 正在计算"，也能取消同一次决策。
 
 ## 安装
 
@@ -15,7 +19,7 @@
 需要已安装 DSH，并使用 `web` profile：
 
 ```powershell
-dsh plugin --profile web add "https://github.com/TryDing-T/dsh-Plugin--ChineseChess/archive/refs/tags/v0.1.12.tar.gz"
+dsh plugin --profile web add "https://github.com/TryDing-T/dsh-Plugin--ChineseChess/archive/refs/tags/v0.1.17.tar.gz"
 ```
 
 安装完成后重启 DSH，在左侧插件入口点击“下盘象棋”。如果你使用的不是 `web`，把 `web` 换成实际 profile 名称。
@@ -39,7 +43,7 @@ dsh --profile web --dump-config | Select-String "xiangqi"
 
 ```powershell
 npm pack --ignore-scripts
-dsh plugin --profile web add ".\deepseek-ai-dsh-plugin-xiangqi-0.1.12.tgz"
+dsh plugin --profile web add ".\deepseek-ai-dsh-plugin-xiangqi-0.1.17.tgz"
 ```
 
 仓库已提交可直接运行的 `lib` 产物。源码构建需要把插件加入与官方 DSH 源码一致的 workspace；只打本地安装包时不要触发独立目录的 `prepack`。
@@ -48,12 +52,28 @@ dsh plugin --profile web add ".\deepseek-ai-dsh-plugin-xiangqi-0.1.12.tgz"
 
 点击红方棋子，再点击合法落点即可落子。红方完成落子后，插件会：
 
-1. 在浏览器本地用浅层 Alpha-Beta 搜索快速生成候选走法；
-2. 把当前 FEN、局面版本和候选走法交给当前 DSH 模型；
-3. 由模型通过 `xiangqi_game` 工具选择黑方走法；
-4. 由 Host 再次校验并提交最终走法。
+1. 当前 DSH Host 还没有棋局时，首次打开棋盘会初始化一局；
+2. 只有点击“新局”时才主动创建一局新的全局棋局（旧棋局立即退役，无法被延迟请求复活）；
+3. 切换 DSH 聊天时读取并继续当前全局棋局；关闭页面、最小化都不影响 Host 内存中的对局；
+   DSH 进程重启后棋局随内存消失，下次打开直接开始新局；
+4. Host 根据当前规则局面生成最多 5 个合法候选，并固定 `gameId + revision + positionId`；
+5. 通过 Host 后台轻量调用请求候选选择，重新检查 revision、局面事实和候选合法性后提交黑方走法；
+6. 插件卸载或热重载时会取消进行中的模型请求，已返回的旧结果一律作废，绝不改变棋局。
 
-因此它不是纯本地 AI：本地搜索用于压缩候选和降低等待时间，大模型仍然负责最终判断。模型推理等级由 DSH 当前会话的模型选择器控制；追求速度时建议使用 Low 或 Medium，High 会明显增加等待时间。
+因此它不是纯本地 AI：本地搜索只在 Host 内压缩候选，大模型仍然负责最终判断。模型失败、取消、输出协议错误或候选过期时，revision 不变，也不会静默切换到本地引擎——棋盘会停在黑方回合并提供“重新请求 DSH 落子”按钮。思考程度跟随会话模型选择器的自定义取值（如 off/xhigh/max），不做插件侧超时。后台轻量调用不会自动生成完整的聊天 reasoning 记录。
+
+## 规则边界
+
+- 将死与困毙都按中国象棋规则判负：一方无合法着法即输，由对方获胜（没有国际象棋式困毙和棋）。
+- 长将、长捉、重复局面等待判规则目前**不自动判定**；如遇循环局面请手动悔棋或开新局。
+
+## 状态与生命周期
+
+- 同一 DSH 进程内：切换聊天、关闭棋盘页面、最小化都不会丢棋局；多个标签页看到一致的棋盘与
+  "AI 正在计算 / 等待重试 / 已取消 / 模型调用失败"状态。
+- DSH 重启或插件 HMR 重载后：棋局随进程内存消失，**没有任何磁盘持久化文件**；
+  旧版本（≤0.1.16）曾写入用户任务会话的 `xiangqi/change` 事件仍可正常加载，新版本不再产生该类事件。
+- 插件卸载：正在等待的模型请求被立即取消，晚到的模型结果不会提交任何落子。
 
 棋盘右上角的“最小化棋盘”可以把棋盘收成右下角悬浮条，点击“恢复棋盘”继续对弈。
 
@@ -85,15 +105,15 @@ npm pack
 
 主要目录：
 
-- `src/host`：Host 服务、规则校验和 DSH 工具。
+- `src/host`：Host 服务、内存态运行状态、模型路由快照与卸载闸门。
 - `src/game`：棋盘状态、合法走法、序列化、记谱和本地候选搜索。
-- `src/client`：侧边栏入口、棋盘界面、棋谱和最小化交互。
-- `tests`：棋规、AI 候选、Host 工具和 React 界面测试。
+- `src/client`：侧边栏入口、棋盘界面、多标签页状态同步与最小化交互。
+- `tests`：棋规、AI 候选、Host 服务、路由快照、生命周期与 React 界面测试。
 
 ## 速度设计
 
-本地搜索参考了 [shibing624/chinese-chess-ai](https://github.com/shibing624/chinese-chess-ai) 的 Alpha-Beta、走法排序和评估思路，并适配到本插件自己的合法走法内核。它只负责快速筛选候选，不替代 DSH 模型的最终判断，也不绕过 Host 的合法性校验。
+本地搜索参考了 [shibing624/chinese-chess-ai](https://github.com/shibing624/chinese-chess-ai) 的 Alpha-Beta、走法排序和评估思路，并适配到本插件自己的合法走法内核。搜索只负责在 Host 内筛选候选，不替代 DSH 模型的最终判断，也不绕过 Host 的 revision 和合法性校验。
 
 ## 许可证
 
-本插件代码按仓库现有许可发布。引用的开源项目请遵守其各自许可证和版权声明。
+[MIT](./LICENSE)。引用的开源项目请遵守其各自许可证和版权声明。

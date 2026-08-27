@@ -39,17 +39,61 @@ const state: XiangqiSerializedState = {
 }
 
 describe('xiangqi UI store', () => {
-  it('clears the projected game busy flag when an operation finishes', () => {
+  it('keeps the board locked while either the page operation or the Host AI is pending', () => {
     const store = createXiangqiStore().create()
-    store.actions.setGame(
-      'session-1',
-      state,
-      game,
-    )
+    store.actions.setGame('session-1', state, { ...game, busy: false })
 
-    store.actions.setBusy(false)
+    // 本页面操作未返回：锁定。
+    store.actions.setOperationBusy(true)
+    expect(store.getSnapshot().operationBusy).toBe(true)
+    expect(store.getSnapshot().game?.busy).toBe(true)
 
-    expect(store.getSnapshot().busy).toBe(false)
+    // 操作返回但 Host 决策仍在跑：保持锁定（跨页面权威状态）。
+    store.actions.setOperationBusy(false)
+    store.actions.setAiPending(true)
+    expect(store.getSnapshot().operationBusy).toBe(false)
+    expect(store.getSnapshot().aiPending).toBe(true)
+    expect(store.getSnapshot().game?.busy).toBe(true)
+    expect(store.getSnapshot().game?.aiPending).toBe(true)
+
+    // 决策结束：解锁。
+    store.actions.setAiPending(false)
     expect(store.getSnapshot().game?.busy).toBe(false)
+    expect(store.getSnapshot().game?.aiPending).toBe(false)
+  })
+
+  it('detaches the chat binding without discarding the global game or Host AI state', () => {
+    const store = createXiangqiStore().create()
+    store.actions.setGame('session-1', state, { ...game, busy: false })
+    store.actions.setAiPending(true)
+
+    store.actions.detachSession()
+
+    expect(store.getSnapshot()).toMatchObject({
+      sessionId: null,
+      gameId: 'game-1',
+      revision: 1,
+      aiPending: true,
+    })
+    expect(store.getSnapshot().game?.busy).toBe(false)
+  })
+
+  it('hostReset drops the stale view but keeps session binding and error state', () => {
+    const store = createXiangqiStore().create()
+    store.actions.setGame('session-1', state, { ...game, busy: false })
+    store.actions.setError('旧错误保留')
+    store.actions.setDecisionTrace(null)
+
+    store.actions.hostReset()
+
+    expect(store.getSnapshot()).toMatchObject({
+      sessionId: 'session-1',
+      gameId: null,
+      revision: null,
+      game: null,
+      decisionTrace: null,
+      aiPending: false,
+      error: '旧错误保留',
+    })
   })
 })

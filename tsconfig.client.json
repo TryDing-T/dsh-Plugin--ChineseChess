@@ -1,5 +1,5 @@
 {
-  "extends": "../../DSHarness/tsconfig.base.client.json",
+  "extends": "../_DSHarness-latest-rc2/tsconfig.base.client.json",
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "lib/types",
@@ -12,13 +12,12 @@
     "src/types.ts"
   ],
   "references": [
-    { "path": "../../DSHarness/vendor/cordis" },
-    { "path": "../../DSHarness/packages/client/ui-slots" },
-    { "path": "../../DSHarness/packages/client/runtime" },
-    { "path": "../../DSHarness/packages/client/ui-layout" },
-    { "path": "../../DSHarness/packages/client/ui-sidebar" },
-    { "path": "../../DSHarness/packages/api/remotes/tsconfig.client.json" },
-    { "path": "../../DSHarness/packages/session/session-projection" },
-    { "path": "../../DSHarness/packages/typert/protocol" }
+    { "path": "../_DSHarness-latest-rc2/vendor/cordis" },
+    { "path": "../_DSHarness-latest-rc2/packages/client/ui-slots" },
+    { "path": "../_DSHarness-latest-rc2/packages/client/runtime" },
+    { "path": "../_DSHarness-latest-rc2/packages/client/ui-layout" },
+    { "path": "../_DSHarness-latest-rc2/packages/client/ui-sidebar" },
+    { "path": "../_DSHarness-latest-rc2/packages/api/remotes/tsconfig.client.json" },
+    { "path": "../_DSHarness-latest-rc2/packages/typert/protocol" }
   ]
 }

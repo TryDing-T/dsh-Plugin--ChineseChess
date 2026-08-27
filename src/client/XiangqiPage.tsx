@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { XiangqiDecisionTrace } from '../types.ts'
 import type {
   XiangqiGameViewModel,
   XiangqiLegalMove,
@@ -10,6 +11,7 @@ import type {
   XiangqiSide,
 } from './types.ts'
 import { XIANGQI_COLUMNS, XIANGQI_ROWS } from './types.ts'
+import { liveStatusTextOf } from './view-model.ts'
 import css from './XiangqiPage.module.css'
 
 const SIDE_LABELS = {
@@ -136,32 +138,71 @@ function exportPgn(moves: readonly XiangqiMoveRecord[]): string {
 function resultHeading(status: XiangqiGameViewModel['status']): string {
   if (status === 'red-won') return '红方获胜'
   if (status === 'black-won') return '黑方获胜'
-  if (status === 'draw') return '和棋'
   return '对局结束'
 }
 
 function resultDetail(game: XiangqiGameViewModel): string {
-  if (game.status === 'resigned') return game.statusText
-  if (game.status === 'draw') return '双方势均力敌，本局以和棋结束'
-  return '精彩对局，恭喜获胜！'
+  // 终局文案统一来自 view-model：认输、将死、困毙各有准确描述。
+  return game.status === 'playing' ? '' : game.statusText
+}
+
+/** 与 busy 配合展示的细粒度动作标签，避免悔棋/新局也显示成"AI 思考中"。 */
+const ACTIVITY_LABELS: Record<NonNullable<XiangqiGameViewModel['activity']>, string> = {
+  idle: '处理中…',
+  ai: 'AI 思考中…',
+  undo: '悔棋中…',
+  new: '开局中…',
+  sync: '正在更新棋局…',
+}
+
+function traceIsActive(trace: XiangqiDecisionTrace | null): boolean {
+  return trace !== null
+    && (trace.phase === 'preparing'
+      || trace.phase === 'requesting'
+      || trace.phase === 'receiving'
+      || trace.phase === 'validating'
+      || trace.phase === 'committing')
 }
 
 /** Props for the visible DSH Chinese chess page. */
 export interface XiangqiPageProps extends XiangqiPageActions {
   /** Current JSON view model projected by the game/host layer. */
   readonly game: XiangqiGameViewModel
+  /** Observable Host/DSH decision progress for the current process-global game. */
+  readonly decisionTrace?: XiangqiDecisionTrace | null
 }
 
 /**
  * 现代新国风 9x10 中国象棋主界面
  */
-export function XiangqiPage({ game, onMove, onNewGame, onUndo, onResign, onExit = () => {} }: XiangqiPageProps) {
+export function XiangqiPage({
+  game,
+  decisionTrace = null,
+  onMove,
+  onNewGame,
+  onUndo,
+  onResign,
+  onCancelAiMove,
+  onRequestAiMove,
+  onExit = () => {},
+}: XiangqiPageProps) {
   const [selected, setSelected] = useState<XiangqiPosition | null>(null)
   const [copySuccess, setCopySuccess] = useState(false)
   const moveListEndRef = useRef<HTMLDivElement | null>(null)
   const moveListContainerRef = useRef<HTMLOListElement | null>(null)
 
   const humanCanMove = game.humanSide === undefined || game.currentTurn === game.humanSide
+  // 黑方回合且当前没有请求在跑：可能是上次 DSH 请求失败/被取消后的待重试状态。
+  const blackTurnPending = game.status === 'playing' && game.currentTurn !== game.humanSide
+  const turnBadge = game.busy === true
+    ? (game.aiPending === true ? 'AI 思考中…' : ACTIVITY_LABELS[game.activity ?? 'idle'])
+    : blackTurnPending ? '等待 DSH 落子' : '落子中'
+  // 重试区文案按最近一次决策的终态如实描述（审查第二轮 P1）。
+  const retryHint = decisionTrace?.phase === 'failed'
+    ? '模型调用失败，棋局 revision 未变'
+    : decisionTrace?.phase === 'cancelled'
+      ? '上次请求已取消，棋局 revision 未变'
+      : '上次 DSH 请求未完成，棋局仍停在黑方回合'
   const selectedLegalMoves = selected === null
     ? []
     : game.legalMoves.filter(move => samePosition(move.from, selected))
@@ -331,7 +372,7 @@ export function XiangqiPage({ game, onMove, onNewGame, onUndo, onResign, onExit 
           </div>
           <div className={css.turnDetails}>
             <span className={css.turnStatusBadge}>
-              {game.busy ? 'AI 思考中…' : '落子中'}
+              {turnBadge}
             </span>
             <strong className={css.turnPlayer}>
               {game.currentTurn === 'red' ? '红方（您）' : '黑方（AI）'}
@@ -482,14 +523,32 @@ export function XiangqiPage({ game, onMove, onNewGame, onUndo, onResign, onExit 
               )}
             </div>
             <div className={css.statusInfo}>
-              <strong className={css.statusHeadline}>{game.statusText}</strong>
+              <strong className={css.statusHeadline}>{liveStatusTextOf(game)}</strong>
               <span className={css.statusSubtext}>
                 {game.status === 'playing'
-                  ? (game.inCheck ? '⚠️ 当前将军，请化解危机！' : (humanCanMove ? '请选择己方棋子并点击绿色/红色落点走子' : 'AI 正在计算最佳应手…'))
+                  ? (game.inCheck
+                    ? '⚠️ 当前将军，请化解危机！'
+                    : (humanCanMove
+                      ? '请选择己方棋子并点击绿色/红色落点走子'
+                      : (game.aiPending === true
+                        ? 'AI 正在计算最佳应手…'
+                        : (blackTurnPending ? '等待 DSH 落子；若上次请求失败，可点击下方按钮重新请求' : 'AI 正在计算最佳应手…'))))
                   : '对局已结束，可点击下方【新局】重新开盘'}
               </span>
             </div>
           </div>
+          {onRequestAiMove !== undefined && blackTurnPending && game.busy !== true && (
+            <div className={css.retryAiRow} data-reason={decisionTrace?.phase ?? 'unknown'}>
+              <button
+                type="button"
+                className={css.retryAiButton}
+                onClick={() => { invokeAction(onRequestAiMove) }}
+              >
+                重新请求 DSH 落子
+              </button>
+              <span className={css.retryAiHint}>{retryHint}</span>
+            </div>
+          )}
         </section>
 
         {/* 右侧：实时走法列表 & 操作面板 */}
@@ -635,6 +694,48 @@ export function XiangqiPage({ game, onMove, onNewGame, onUndo, onResign, onExit 
                 <span>认输</span>
               </button>
             </div>
+          </section>
+
+          {/* DSH 可观察决策链：展示请求、流式状态和结构化结果，不展开隐藏思维内容。 */}
+          <section className={css.tracePanel} aria-labelledby="xiangqi-trace-title">
+            <div className={css.traceHeader}>
+              <div className={css.panelTitleGroup}>
+                <h2 className={css.panelTitle} id="xiangqi-trace-title">DSH 决策链</h2>
+                {decisionTrace !== null && (
+                  <span className={css.tracePhase} data-phase={decisionTrace.phase}>
+                    {decisionTrace.phaseText}
+                  </span>
+                )}
+              </div>
+              {traceIsActive(decisionTrace) && onCancelAiMove !== undefined && (
+                <button type="button" className={css.traceCancelButton} onClick={() => { void onCancelAiMove() }}>
+                  停止思考
+                </button>
+              )}
+            </div>
+            {decisionTrace === null ? (
+              <div className={css.traceEmpty}>红方走子后，这里会显示发送给 DSH 的请求和返回结果。</div>
+            ) : (
+              <>
+                <div className={css.traceMeta}>
+                  <span>{decisionTrace.provider}/{decisionTrace.model}</span>
+                  <span>revision {decisionTrace.revision}</span>
+                  <span>{decisionTrace.elapsedMs} ms</span>
+                </div>
+                <ol className={css.traceList} aria-live="polite">
+                  {decisionTrace.entries.map(entry => (
+                    <li key={entry.id} className={css.traceMessage} data-speaker={entry.speaker} data-kind={entry.kind}>
+                      <div className={css.traceMessageHeader}>
+                        <span className={css.traceSpeaker}>{entry.speaker === 'dsh' ? 'DSH' : 'Host'}</span>
+                        <time>{entry.elapsedMs} ms</time>
+                      </div>
+                      <p>{entry.text}</p>
+                    </li>
+                  ))}
+                </ol>
+                <p className={css.traceFootnote}>显示可观察的请求、流式状态和结构化返回；不展开模型隐藏思维内容。</p>
+              </>
+            )}
           </section>
         </aside>
       </div>

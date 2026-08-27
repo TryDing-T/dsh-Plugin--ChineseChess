@@ -1,5 +1,5 @@
 import type { JsonValue, XiangqiChange, XiangqiMove } from '../types.ts';
-export type { JsonObject, JsonPrimitive, JsonValue, XiangqiChange, XiangqiGamePhase, XiangqiMove, XiangqiMoveRequest, XiangqiNewGameRequest, XiangqiOperation, XiangqiResignRequest, XiangqiSerializedState, XiangqiSide, XiangqiUndoRequest, } from '../types.ts';
+export type { JsonObject, JsonPrimitive, JsonValue, XiangqiAiModelOverride, XiangqiAiReasoningEffort, XiangqiAiTurnRequest, XiangqiAiTurnResult, XiangqiChange, XiangqiDecisionBoardEncoding, XiangqiDecisionCandidate, XiangqiDecisionMeta, XiangqiDecisionObserved, XiangqiDecisionPacket, XiangqiDecisionResponse, XiangqiDecisionRuleFacts, XiangqiGamePhase, XiangqiMove, XiangqiMoveRequest, XiangqiNewGameRequest, XiangqiOperation, XiangqiResignRequest, XiangqiSerializedState, XiangqiSide, XiangqiUndoRequest, } from '../types.ts';
 /**
  * Minimal game-core port required by the Host service.
  *

@@ -270,8 +270,9 @@ function evaluateBoard(board: Board, turn: Side): {
   const inCheck = isSquareAttacked(board, general, otherSide(turn))
   const hasMove = generateLegalMoves(board, turn).length > 0
   if (hasMove) return { inCheck, status: 'playing', winner: null }
-  if (inCheck) return { inCheck, status: 'checkmate', winner: otherSide(turn) }
-  return { inCheck, status: 'stalemate', winner: null }
+  // 中国象棋规则：一方无合法着法即判负——被将军时是"将死"，
+  // 未被将军时是"困毙"，两者都由对方获胜（与国际象棋的和棋规则不同）。
+  return { inCheck, status: inCheck ? 'checkmate' : 'stalemate', winner: otherSide(turn) }
 }
 
 function generateLegalMoves(board: Board, side: Side): Move[] {
