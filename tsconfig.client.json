@@ -1,23 +1,31 @@
 {
-  "extends": "../_DSHarness-latest-rc2/tsconfig.base.client.json",
+  "//": "0.1.2 适配：不再 extends _DSHarness 源码基座，类型全部从 node_modules 的 npm 包（0.1.2-alpha.3）解析（详见 tsconfig.host.json 注释）。",
   "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "rootDir": "src",
     "outDir": "lib/types",
     "tsBuildInfoFile": "./.tsbuildinfo.client",
-    "noUncheckedIndexedAccess": false
+    "composite": true,
+    "incremental": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "noEmitOnError": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noUncheckedIndexedAccess": false,
+    "jsx": "react-jsx",
+    "types": []
   },
   "include": [
     "src/client",
     "src/game",
     "src/types.ts"
-  ],
-  "references": [
-    { "path": "../_DSHarness-latest-rc2/vendor/cordis" },
-    { "path": "../_DSHarness-latest-rc2/packages/client/ui-slots" },
-    { "path": "../_DSHarness-latest-rc2/packages/client/runtime" },
-    { "path": "../_DSHarness-latest-rc2/packages/client/ui-layout" },
-    { "path": "../_DSHarness-latest-rc2/packages/client/ui-sidebar" },
-    { "path": "../_DSHarness-latest-rc2/packages/api/remotes/tsconfig.client.json" },
-    { "path": "../_DSHarness-latest-rc2/packages/typert/protocol" }
   ]
 }

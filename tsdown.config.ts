@@ -1,7 +1,7 @@
 /** DSH's browser bundle preset keeps the plugin in the module-loader graph. */
 
 import { isBuiltin } from 'node:module'
-import { clientBundle } from '../_DSHarness-latest-rc2/packages/client/tsdown.client.ts'
+import { clientBundle } from '../_DSHarness-alpha3/packages/client/tsdown.client.ts'
 
 export default clientBundle(
   '@deepseek-ai/dsh-plugin-xiangqi',

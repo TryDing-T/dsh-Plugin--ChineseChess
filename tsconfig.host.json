@@ -1,10 +1,26 @@
 {
-  "extends": "../_DSHarness-latest-rc2/tsconfig.base.json",
+  "//": "0.1.2 适配：不再 extends _DSHarness 源码基座（源码树 paths 会把 @deepseek-ai/* 映射到未生成 typert 产物的 src，且把插件锁死在仓库构建）。类型全部从 node_modules 的 npm 包（0.1.2-alpha.3）解析，与运行时装配一致。",
   "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "rootDir": "src",
     "outDir": "lib/types",
     "tsBuildInfoFile": "./.tsbuildinfo.host",
-    "noUncheckedIndexedAccess": false
+    "composite": true,
+    "incremental": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "noEmitOnError": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noUncheckedIndexedAccess": false,
+    "types": ["node"]
   },
   "include": [
     "src/index.ts",
@@ -13,13 +29,5 @@
     "src/game",
     "src/host"
   ],
-  "exclude": ["src/client"],
-  "references": [
-    { "path": "../_DSHarness-latest-rc2/vendor/cordis" },
-    { "path": "../_DSHarness-latest-rc2/vendor/schemastery" },
-    { "path": "../_DSHarness-latest-rc2/packages/core/agent" },
-    { "path": "../_DSHarness-latest-rc2/packages/core/session" },
-    { "path": "../_DSHarness-latest-rc2/packages/llm/llm" },
-    { "path": "../_DSHarness-latest-rc2/packages/typert/protocol" }
-  ]
+  "exclude": ["src/client"]
 }

@@ -5,13 +5,12 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import {
   BlockAssembler,
   createUserMessage,
-  deepFreeze,
   ReasoningEffortId,
 } from '@deepseek-ai/dsh-llm'
+import { deepFreeze } from '@deepseek-ai/dsh-util-values'
 import type { FinishReason, GenerateOptions, LlmFailure, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { GameState } from '../game/types.ts'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {
   XiangqiAiTurnRequest,
   XiangqiAiTurnResult,
