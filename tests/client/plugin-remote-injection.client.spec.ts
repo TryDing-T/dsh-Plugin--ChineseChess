@@ -2,10 +2,12 @@
 /**
  * Client Loader 组合冒烟：真实 cordis + cordis-plugin-loader 激活客户端插件。
  *
- * 它依赖完整 DSH 浏览器模块运行时（@deepseek-ai/cordis、client-runtime、
+ * 它依赖完整 DSH 浏览器模块运行时（@deepseek-ai/cordis、cordis-plugin-loader、
  * window.__ModuleLoader__ 等）。本工作区不安装这些运行时包，因此顶层先做
- * 能力探测，缺失时整体跳过以保持 `npm test` 全绿；在具备 rc.2 完整依赖的
- * 镜像/CI 中会真实执行并覆盖 Remote 生命周期与新增接口。
+ * 能力探测，缺失时整体跳过以保持 `npm test` 全绿；在具备 0.1.2-alpha.3
+ * 完整依赖的镜像/CI 中会真实执行并覆盖 Remote 生命周期与新增接口。
+ * （0.1.2 适配：客户端插件入口不再使用 @deepseek-ai/dsh-client-runtime，
+ * store 引擎迁至 @deepseek-ai/dsh-client-store。）
  */
 import { describe, expect, it, beforeAll } from 'vitest'
 
@@ -20,8 +22,8 @@ async function runtimeImport<T = unknown>(scope: string, subpath: string): Promi
 
 const hasCordis = await runtimeImport('@deepseek-ai', 'cordis').then(() => true, () => false)
 const hasLoader = await runtimeImport('@deepseek-ai', 'cordis-plugin-loader').then(() => true, () => false)
-const hasClientRuntime = await runtimeImport('@deepseek-ai/dsh-client-runtime', 'client').then(() => true, () => false)
-const runnable = hasCordis && hasLoader && hasClientRuntime
+const hasClientStore = await runtimeImport('@deepseek-ai', 'dsh-client-store').then(() => true, () => false)
+const runnable = hasCordis && hasLoader && hasClientStore
 
 describe.skipIf(!runnable)('xiangqi client Remote lifecycle', () => {
   let clientPlugin: Record<string, unknown>
@@ -71,18 +73,8 @@ describe.skipIf(!runnable)('xiangqi client Remote lifecycle', () => {
     const injectSlot = vi.fn()
     const disposeSlots = ctx.provide('slots', { inject: injectSlot })
     const disposeSessions = ctx.provide('sessions', { binding: vi.fn() })
-    // apply() 的子 Fiber 精确注入 'connection' 以读取模型选择快照；
-    // 缺少它 Loader 会一直等待服务就绪而不是失败。
-    const connection = {
-      api: {
-        sessions: {
-          models: vi.fn(async () => ({
-            result: { ok: false, error: { code: 'STUB', message: 'model catalog not available in tests' } },
-          })),
-        },
-      },
-    }
-    const disposeConnection = ctx.provide('connection', connection)
+    // 0.1.2 适配：Child fiber 不再注入 'connection'（官方 session.models RPC
+    // 已移除，模型路由由 Host 会话请求头兜底）。
 
     await ctx.plugin(Loader)
     ctx.loader.internal = {
@@ -102,7 +94,6 @@ describe.skipIf(!runnable)('xiangqi client Remote lifecycle', () => {
     expect(ctx.get('remote.xiangqi')).toBeUndefined()
     disposeSessions()
     disposeSlots()
-    disposeConnection()
     await ctx.fiber.dispose()
   })
 })

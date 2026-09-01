@@ -1,6 +1,7 @@
 /** Root-scoped UI state for the independent Chinese chess overlay. */
 
-import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
+// 0.1.2 适配：dsh-client-runtime 包已移除，store 引擎迁至 @deepseek-ai/dsh-client-store。
+import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
 import type { XiangqiDecisionTrace, XiangqiSerializedState } from '../types.ts'
 import type { XiangqiActivity, XiangqiGameViewModel } from './types.ts'
 

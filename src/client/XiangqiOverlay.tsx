@@ -3,11 +3,9 @@
 import { useEffect, useRef } from 'react'
 import type { PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
-import type {} from '@deepseek-ai/dsh-client-runtime/client'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-client-connection/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type {
-  XiangqiAiModelOverride,
   XiangqiAiTurnRequest,
   XiangqiAiTurnResult,
   XiangqiDecisionTrace,
@@ -42,11 +40,11 @@ export interface XiangqiClientRemote {
 }
 
 /**
- * 每次黑方请求前读取一次当前会话的模型选择快照（审查第二轮 P0）。
- * 实现端走官方 `session.models` Remote；失败返回 null，让 Host 用自己的
- * 会话头快照兜底，绝不阻塞对弈。
+ * 0.1.2 适配：官方 Client 侧 `session.models` RPC 已不存在（模型选择状态
+ * 由持久 `model/selection` 事件与请求头记录），黑方请求不再携带显式
+ * modelOverride，由 Host 在 resolveDecisionRoute 里用会话请求头
+ * （agent.session.requestHeader()）与 Agent 创建选项兜底解析路由。
  */
-export type XiangqiModelSelectionFetcher = (sessionId: SessionId) => Promise<XiangqiAiModelOverride | null>
 
 /** 决策进行中的轮询节奏；空闲时低频核对全局状态。 */
 const AI_PENDING_POLL_MS = 350
@@ -71,7 +69,6 @@ function unwrap<T>(result: RemoteResult<T>): T {
  */
 export function createXiangqiOverlay(
   remote: XiangqiClientRemote,
-  fetchModelSelection: XiangqiModelSelectionFetcher = () => Promise.resolve(null),
 ) {
   return function XiangqiOverlay({
     useSessions,
@@ -225,14 +222,11 @@ export function createXiangqiOverlay(
     ): Promise<void> => {
       actions.setActivity('ai')
       try {
-        // 关键：用"这一刻"的会话模型选择作为不可变快照。用户切到模型 B 后
-        // 即使没发过聊天消息，黑棋也立即由 B 决策；off/xhigh/max 原样透传，
-        // 快照读取失败时返回 null，由 Host 会话头兜底。
-        const override = await fetchModelSelection(current).catch(() => null)
+        // 0.1.2 适配：不再从 Client 侧取模型快照（官方 session.models RPC
+        // 已移除），Host 用会话请求头快照解析 provider/model/思考程度。
         const result = unwrap(await remote.requestAiMove(current, {
           gameId: turn.gameId,
           revision: turn.revision,
-          ...(override === null ? {} : { modelOverride: override }),
         }))
         const latestTrace = await remote.getDecisionTrace(current, turn.gameId)
           .then(response => response.ok ? response.value : null)

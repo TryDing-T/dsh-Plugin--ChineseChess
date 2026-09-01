@@ -7,10 +7,14 @@
 - Host 端负责棋规、合法性、轮次和版本校验，客户端只负责交互展示。
 - 棋局只保存在 DSH Host 进程内存里，**不写入任何用户任务会话历史**；切换 DSH 聊天不会重开棋局，
   DSH 重启或插件重载后自然回到未开局状态，下次打开直接创建新局。
-- 黑方决策走 Host 后台轻量调用：每次落子前读取当前会话的模型选择快照（provider/model/思考程度），
-  用户切换模型后无需先发聊天消息即可生效。
+- 黑方决策走 Host 后台轻量调用：路由使用 Agent 会话请求头快照（provider/model/思考程度）
+  与显式覆盖解析，与 DSH 0.1.2 的 `model/selection` 记录语义一致。
 - 支持最小化棋盘、悔棋、新局、认输和棋谱复制；模型请求失败后可一键"重新请求 DSH 落子"。
 - 多个标签页/窗口共享同一份全局棋局与 AI 状态：任一页面都能看到"AI 正在计算"，也能取消同一次决策。
+
+> **版本兼容**：v0.1.18 适配 DSH **0.1.2-alpha.3**（`dsh`/profile 依赖全 0.1.2-alpha.3 线）。
+> 依赖 `dsh-client-store`/`dsh-util-values` 等 0.1.2 新包；不再使用已在 0.1.2 移除的
+> `dsh-client-runtime` 与 Client 侧 `session.models` RPC（模型路由改由 Host 会话请求头兜底）。
 
 ## 安装
 
@@ -19,7 +23,7 @@
 需要已安装 DSH，并使用 `web` profile：
 
 ```powershell
-dsh plugin --profile web add "https://github.com/TryDing-T/dsh-Plugin--ChineseChess/archive/refs/tags/v0.1.17.tar.gz"
+dsh plugin --profile web add "https://github.com/TryDing-T/dsh-Plugin--ChineseChess/archive/refs/tags/v0.1.18.tar.gz"
 ```
 
 安装完成后重启 DSH，在左侧插件入口点击“下盘象棋”。如果你使用的不是 `web`，把 `web` 换成实际 profile 名称。
@@ -42,11 +46,11 @@ dsh --profile web --dump-config | Select-String "xiangqi"
 ### 从本地安装包安装
 
 ```powershell
-npm pack --ignore-scripts
-dsh plugin --profile web add ".\deepseek-ai-dsh-plugin-xiangqi-0.1.17.tgz"
+npm pack
+dsh plugin --profile web add ".\deepseek-ai-dsh-plugin-xiangqi-0.1.18.tgz"
 ```
 
-仓库已提交可直接运行的 `lib` 产物。源码构建需要把插件加入与官方 DSH 源码一致的 workspace；只打本地安装包时不要触发独立目录的 `prepack`。
+仓库已提交可直接运行的 `lib` 产物（含 typert 手写生成与 browser bundle）。
 
 ## 对弈方式
 
@@ -60,7 +64,7 @@ dsh plugin --profile web add ".\deepseek-ai-dsh-plugin-xiangqi-0.1.17.tgz"
 5. 通过 Host 后台轻量调用请求候选选择，重新检查 revision、局面事实和候选合法性后提交黑方走法；
 6. 插件卸载或热重载时会取消进行中的模型请求，已返回的旧结果一律作废，绝不改变棋局。
 
-因此它不是纯本地 AI：本地搜索只在 Host 内压缩候选，大模型仍然负责最终判断。模型失败、取消、输出协议错误或候选过期时，revision 不变，也不会静默切换到本地引擎——棋盘会停在黑方回合并提供“重新请求 DSH 落子”按钮。思考程度跟随会话模型选择器的自定义取值（如 off/xhigh/max），不做插件侧超时。后台轻量调用不会自动生成完整的聊天 reasoning 记录。
+因此它不是纯本地 AI：本地搜索只在 Host 内压缩候选，大模型仍然负责最终判断。模型失败、取消、输出协议错误或候选过期时，revision 不变，也不会静默切换到本地引擎——棋盘会停在黑方回合并提供"重新请求 DSH 落子"按钮。思考程度跟随会话模型选择器的自定义取值（如 off/xhigh/max），由 Host 路由解析原样透传。后台轻量调用不会自动生成完整的聊天 reasoning 记录。
 
 ## 规则边界
 
@@ -102,6 +106,11 @@ npm test
 npm run build
 npm pack
 ```
+
+类型与测试解析全部来自 `node_modules` 的 0.1.2-alpha.3 npm 包，不依赖 DSH 源码工作区；
+`tsdown` 的 client 打包预设来自本机 `_DSHarness-alpha3`（0.1.2-alpha.3 克隆，`packages/client/tsdown.client.ts`），
+构建前需在 `_DSHarness-alpha3/packages/extensions/xiangqi-validation/` 放置同名 `package.json` 化身
+（预设的 workspaceManifest glob 需要识别插件名），源码树自 0.1.2 起不再提交生成的 typert 产物。
 
 主要目录：
 

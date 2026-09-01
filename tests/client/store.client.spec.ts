@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('@deepseek-ai/dsh-client-runtime/client', () => ({
+// 0.1.2 适配：defineStore 引擎迁至 @deepseek-ai/dsh-client-store（dsh-client-runtime 包已移除）。
+vi.mock('@deepseek-ai/dsh-client-store', () => ({
   defineStore: (decl: {
     init: () => Record<string, unknown>
     actions: Record<string, (draft: Record<string, unknown>, ...params: unknown[]) => void>
