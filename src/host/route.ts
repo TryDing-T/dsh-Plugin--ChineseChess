@@ -14,9 +14,10 @@ export interface DecisionRoute {
   readonly reasoningEffort: string
 }
 
-/** 组装路由的全部可能来源：显式覆盖 > 会话请求头 > 请求上下文 > Agent 默认。 */
+/** 路由来源：显式覆盖 > 待生效模型选择 > 请求头 > 请求上下文 > Agent 默认。 */
 export interface ModelRouteSources {
   readonly override?: XiangqiAiModelOverride
+  readonly selectedModel?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string }
   readonly headerConfig?: { readonly provider?: string; readonly model?: string; readonly reasoningEffort?: unknown }
   readonly requestContext?: { readonly provider?: string; readonly model?: string }
   readonly agentOptions?: { readonly provider?: string; readonly model?: string }
@@ -42,8 +43,8 @@ function firstNonEmpty(...values: ReadonlyArray<string | undefined>): string | u
  */
 export function resolveRouteFromSnapshot(sources: ModelRouteSources): DecisionRoute {
   const override = sources.override
-  const liveProvider = firstNonEmpty(sources.headerConfig?.provider, sources.requestContext?.provider, sources.agentOptions?.provider)
-  const liveModel = firstNonEmpty(sources.headerConfig?.model, sources.requestContext?.model, sources.agentOptions?.model)
+  const liveProvider = firstNonEmpty(sources.selectedModel?.provider, sources.headerConfig?.provider, sources.requestContext?.provider, sources.agentOptions?.provider)
+  const liveModel = firstNonEmpty(sources.selectedModel?.model, sources.headerConfig?.model, sources.requestContext?.model, sources.agentOptions?.model)
   // 覆盖字段里的空串/空白视为未指定，继续向会话来源回退。
   const provider = firstNonEmpty(override?.provider) ?? liveProvider
   const model = firstNonEmpty(override?.model) ?? liveModel
@@ -53,11 +54,11 @@ export function resolveRouteFromSnapshot(sources: ModelRouteSources): DecisionRo
       '当前会话还没有可用的 provider/model；请先在该会话完成一次对话，或在请求里显式指定模型',
     )
   }
-  // 思考程度优先级：显式覆盖 > 会话最近一次真实请求的头；未知自定义值
-  // （off/xhigh/max…）原样透传给适配器，绝不静默丢弃。
+  // A complete explicit model override owns its default effort as well.
+  const overridesModel = firstNonEmpty(override?.provider) !== undefined && firstNonEmpty(override?.model) !== undefined
   const effort = override?.reasoningEffort !== undefined
     ? normalizeEffort(override.reasoningEffort)
-    : normalizeEffort(sources.headerConfig?.reasoningEffort)
+    : overridesModel ? undefined : normalizeEffort(sources.selectedModel === undefined ? sources.headerConfig?.reasoningEffort : sources.selectedModel.reasoningEffort)
   return {
     provider: provider.trim(),
     model: model.trim(),

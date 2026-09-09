@@ -3,6 +3,13 @@ import { resolveRouteFromSnapshot } from '../../src/host/route.ts'
 import { XiangqiError } from '../../src/host/service.ts'
 
 describe('模型路由快照（审查第二轮 P0）', () => {
+  it('does not inherit the old effort when an explicit model override uses its default', () => {
+    expect(resolveRouteFromSnapshot({
+      override: { provider: 'override', model: 'model' },
+      selectedModel: { provider: 'selected', model: 'model', reasoningEffort: 'xhigh' },
+      headerConfig: { provider: 'old', model: 'model', reasoningEffort: 'high' },
+    }).reasoningEffort).toBe('auto')
+  })
   it('prefers an explicit override over every session source, verbatim', () => {
     const route = resolveRouteFromSnapshot({
       override: { provider: 'opencode-go', model: 'gpt-xhigh', reasoningEffort: 'xhigh' },

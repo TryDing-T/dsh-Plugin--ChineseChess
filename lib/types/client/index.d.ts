@@ -12,7 +12,8 @@ export type { XiangqiGameStatus, XiangqiGameViewModel, XiangqiLegalMove, Xiangqi
  * The outer Client plugin mounts the generated Remote; the UI itself runs in
  * a child fiber.
  */
+export declare const name = "dsh-plugin-xiangqi/client";
 export declare const inject: string[];
 /** Mount the Host Remote, then activate the UI in a child with the exact namespace injection. */
-export declare function apply(ctx: ClientContext): Promise<void>;
+export declare function apply(ctx: ClientContext): Promise<() => Promise<void>>;
 //# sourceMappingURL=index.d.ts.map

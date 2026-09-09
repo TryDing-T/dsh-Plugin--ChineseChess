@@ -10,9 +10,14 @@ export interface DecisionRoute {
     readonly model: string;
     readonly reasoningEffort: string;
 }
-/** 组装路由的全部可能来源：显式覆盖 > 会话请求头 > 请求上下文 > Agent 默认。 */
+/** 路由来源：显式覆盖 > 待生效模型选择 > 请求头 > 请求上下文 > Agent 默认。 */
 export interface ModelRouteSources {
     readonly override?: XiangqiAiModelOverride;
+    readonly selectedModel?: {
+        readonly provider: string;
+        readonly model: string;
+        readonly reasoningEffort?: string;
+    };
     readonly headerConfig?: {
         readonly provider?: string;
         readonly model?: string;
