@@ -2,6 +2,8 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-session-projection'
+import type {} from '@deepseek-ai/dsh-api-session-controller/types'
 import {
   BlockAssembler,
   createUserMessage,
@@ -45,16 +47,6 @@ import { XiangqiDecisionGate } from './decision-gate.ts'
 import { freezeElapsedMs, isTerminalPhase } from './trace-timing.ts'
 import { deserialize as deserializeGame } from '../game/serialization.ts'
 import type {} from '../domain.ts'
-import { registerXiangqiSessionEventType } from '../domain.ts'
-
-// Must run while the Host bundle is being loaded, before a persisted session
-// is adopted by the persistence coordinator.
-//
-// 本插件自 0.1.17 起不再向任何会话写入 `xiangqi/change` 事件，棋局只保存在
-// Host 进程内存里：DSH 重启或插件 HMR 重载后自然回到"未开局"，下次打开棋盘
-// 直接创建新局。这里仍向事件目录注册该类型，纯粹是为了让 ≤0.1.16 时代写入
-// 的历史会话在任何机器上都能继续加载。
-registerXiangqiSessionEventType()
 
 interface SessionGame {
   readonly service: XiangqiHostService
@@ -130,10 +122,11 @@ function finishError(finish: FinishReason): Error | undefined {
  * with Agent so Typert maps the client SessionId to the exact live agent.
  */
 export class XiangqiService extends TypertRemoteService {
-  static inject = ['agents', 'llm']
+  static inject = ['agents', 'llm', 'sessionProjections']
 
   private readonly gate = new XiangqiDecisionGate()
   private readonly game: SessionGame
+  private readonly decisions = new Set<Promise<void>>()
 
   constructor(ctx: Context) {
     super(ctx, 'xiangqi')
@@ -148,13 +141,15 @@ export class XiangqiService extends TypertRemoteService {
     })
     // 插件卸载 / HMR 重载：标记销毁并取消进行中的模型请求。已经返回的旧
     // 结果在提交落子前会再次检查闸门，绝不可能在卸载后改变棋局。
-    ctx.effect(() => () => { this.destroy() }, 'xiangqi: dispose gate')
+    ctx.effect(() => () => this.destroy(), 'xiangqi: dispose gate')
   }
 
   /** 卸载闸门：销毁后所有写路径与模型结果提交都被拒绝。 */
-  private destroy(): void {
+  private async destroy(): Promise<void> {
     this.gate.destroy()
     this.cancelPending(this.game)
+    // Cancelled requests may still be draining after a new decision starts.
+    await Promise.all(this.decisions)
     this.game.trace = undefined
   }
 
@@ -303,6 +298,8 @@ export class XiangqiService extends TypertRemoteService {
       controller: new AbortController(),
     }
     game.pending = pending
+    const completion = Promise.withResolvers<void>()
+    this.decisions.add(completion.promise)
     const startedAt = Date.now()
 
     try {
@@ -468,6 +465,8 @@ export class XiangqiService extends TypertRemoteService {
       // 无论成败都解除闸门登记；aiPending 的权威值由 getRuntimeState 反映。
       this.gate.settle(decisionId)
       if (game.pending?.decisionId === decisionId) game.pending = undefined
+      this.decisions.delete(completion.promise)
+      completion.resolve()
     }
   }
 
@@ -600,14 +599,22 @@ export class XiangqiService extends TypertRemoteService {
   /** Resolve the decision route from an explicit override or the session snapshot. */
   private resolveDecisionRoute(agent: Agent, request: XiangqiAiTurnRequest): DecisionRoute {
     const override = request.modelOverride
-    const hasOverride = override?.provider !== undefined && override.model !== undefined
-    const headerConfig = hasOverride ? undefined : agent.session.requestHeader()?.config
+    const selection = this.ctx.sessionProjections.stateOf(agent.session, 'modelSelection')
+    if (selection === undefined) {
+      throw new XiangqiError('INVALID_DECISION', 'DSH modelSelection 投影尚未注册，无法读取当前模型选择')
+    }
+    const header = agent.session.requestHeader()
+    const headerConfig = header?.config
     const requestContext = agent.session.requestContext()
-    // 纯函数解析（见 ./route.ts，可单测）：显式覆盖 > 会话请求头 >
-    // 请求上下文 > Agent 创建默认值；off/xhigh/max 等自定义级别原样透传。
+    // A pending selection is a complete choice, including an absent effort.
     return resolveRouteFromSnapshot({
-      ...(override === undefined || !hasOverride ? {} : { override }),
-      ...(headerConfig === undefined ? {} : { headerConfig: { provider: headerConfig.provider, model: headerConfig.model, reasoningEffort: headerConfig.reasoningEffort } }),
+      ...(override === undefined ? {} : { override }),
+      ...(selection.pending === null ? {} : { selectedModel: selection.pending }),
+      ...(headerConfig === undefined ? {} : { headerConfig: {
+        provider: headerConfig.provider,
+        model: headerConfig.model,
+        reasoningEffort: header?.adapterDefaults?.reasoningEffort === true ? undefined : headerConfig.reasoningEffort,
+      } }),
       ...(requestContext === undefined ? {} : { requestContext }),
       agentOptions: agent.options,
     })

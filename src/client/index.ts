@@ -44,12 +44,18 @@ export type {
  * The outer Client plugin mounts the generated Remote; the UI itself runs in
  * a child fiber.
  */
+export const name = 'dsh-plugin-xiangqi/client'
 export const inject = ['remote']
 
 /** Mount the Host Remote, then activate the UI in a child with the exact namespace injection. */
-export async function apply(ctx: ClientContext): Promise<void> {
-  const disposeRemote = await ctx.remote.$mount(xiangqiRemote)
-  ctx.effect(() => () => { void disposeRemote() }, 'ui-xiangqi: Remote mount')
+export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
+  let disposeRemote: (() => Promise<void>) | undefined
+  try {
+    disposeRemote = await ctx.remote.$mount(xiangqiRemote)
+  } catch (error) {
+    if (disposeRemote !== undefined) await disposeRemote()
+    throw error
+  }
 
   // A mounted Remote namespace is a Cordis child service. Reading
   // ctx.remote.xiangqi from this outer fiber would violate the injection guard,
@@ -58,6 +64,10 @@ export async function apply(ctx: ClientContext): Promise<void> {
   await ctx.inject(['slots', 'sessions', 'remote', 'remote.xiangqi'], (uiCtx) => {
     applyXiangqiUi(uiCtx)
   })
+
+  return async () => {
+    if (disposeRemote !== undefined) await disposeRemote()
+  }
 }
 
 /** Register the browser surfaces from a context authorized for remote.xiangqi. */

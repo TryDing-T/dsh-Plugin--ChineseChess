@@ -1,5 +1,5 @@
 {
-  "//": "0.1.2 适配：不再 extends _DSHarness 源码基座（源码树 paths 会把 @deepseek-ai/* 映射到未生成 typert 产物的 src，且把插件锁死在仓库构建）。类型全部从 node_modules 的 npm 包（0.1.2-alpha.3）解析，与运行时装配一致。",
+  "//": "0.1.5 适配：类型全部从 node_modules 的 npm 包（0.1.5-alpha.1）解析，与运行时装配一致。",
   "compilerOptions": {
     "target": "ES2024",
     "lib": ["ES2024"],

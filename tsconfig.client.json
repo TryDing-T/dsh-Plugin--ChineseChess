@@ -1,5 +1,5 @@
 {
-  "//": "0.1.2 适配：不再 extends _DSHarness 源码基座，类型全部从 node_modules 的 npm 包（0.1.2-alpha.3）解析（详见 tsconfig.host.json 注释）。",
+  "//": "0.1.5 适配：类型全部从 node_modules 的 npm 包（0.1.5-alpha.1）解析（详见 tsconfig.host.json 注释）。",
   "compilerOptions": {
     "target": "ES2024",
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
@@ -21,7 +21,7 @@
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": false,
     "jsx": "react-jsx",
-    "types": []
+    "types": ["react", "react-dom"]
   },
   "include": [
     "src/client",

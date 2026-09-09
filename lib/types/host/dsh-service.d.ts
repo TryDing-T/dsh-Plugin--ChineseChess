@@ -12,6 +12,7 @@ export declare class XiangqiService extends TypertRemoteService {
     static inject: string[];
     private readonly gate;
     private readonly game;
+    private readonly decisions;
     constructor(ctx: Context);
     /** 卸载闸门：销毁后所有写路径与模型结果提交都被拒绝。 */
     private destroy;

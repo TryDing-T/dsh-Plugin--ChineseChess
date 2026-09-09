@@ -2,14 +2,14 @@
 /**
  * Client Loader 组合冒烟：真实 cordis + cordis-plugin-loader 激活客户端插件。
  *
- * 它依赖完整 DSH 浏览器模块运行时（@deepseek-ai/cordis、cordis-plugin-loader、
- * window.__ModuleLoader__ 等）。本工作区不安装这些运行时包，因此顶层先做
- * 能力探测，缺失时整体跳过以保持 `npm test` 全绿；在具备 0.1.2-alpha.3
- * 完整依赖的镜像/CI 中会真实执行并覆盖 Remote 生命周期与新增接口。
- * （0.1.2 适配：客户端插件入口不再使用 @deepseek-ai/dsh-client-runtime，
- * store 引擎迁至 @deepseek-ai/dsh-client-store。）
+ * 加载真实 lib/client.js factory 后交给 Cordis Loader。
+ * 仅模拟 Remote transport 和宿主 UI 服务；缺依赖、产物或 factory 均失败。
  */
 import { describe, expect, it, beforeAll } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { runInNewContext } from 'node:vm'
+import { resolve } from 'node:path'
 
 /**
  * 运行时动态导入。specifier 由变量拼出，打包/转换器无法静态解析，
@@ -20,21 +20,22 @@ async function runtimeImport<T = unknown>(scope: string, subpath: string): Promi
   return await import(/* @vite-ignore */ specifier) as T
 }
 
-const hasCordis = await runtimeImport('@deepseek-ai', 'cordis').then(() => true, () => false)
-const hasLoader = await runtimeImport('@deepseek-ai', 'cordis-plugin-loader').then(() => true, () => false)
-const hasClientStore = await runtimeImport('@deepseek-ai', 'dsh-client-store').then(() => true, () => false)
-const runnable = hasCordis && hasLoader && hasClientStore
-
-describe.skipIf(!runnable)('xiangqi client Remote lifecycle', () => {
+describe('xiangqi client Remote lifecycle', () => {
   let clientPlugin: Record<string, unknown>
 
   beforeAll(async () => {
-    // Client 插件经 Loader 模块表加载时，bundle 工厂以 window.__ModuleLoader__
-    // 自注册；Node 测试环境必须在动态导入插件源码之前备好该全局。
-    ;(window as unknown as Record<string, unknown>).__ModuleLoader__ = {
-      load: (_declaration: unknown) => ({ exports: {} }),
-    }
-    clientPlugin = await import('../../src/client/index.ts') as Record<string, unknown>
+    let declaration: { id: string; factory: (require: (id: string) => unknown) => Record<string, unknown> } | undefined
+    runInNewContext(readFileSync(resolve('lib/client.js'), 'utf8'), {
+      window: { __ModuleLoader__: { load: (value: typeof declaration) => { declaration = value } } },
+      document, console, setTimeout, clearTimeout, AbortController,
+    })
+    expect(declaration?.id).toBe('@deepseek-ai/dsh-plugin-xiangqi')
+    const require = createRequire(resolve('package.json'))
+    const platform = new Set(['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-store'])
+    clientPlugin = declaration!.factory((specifier) => {
+      if (!platform.has(specifier)) throw new Error(`unexpected bundle dependency: ${specifier}`)
+      return require(specifier)
+    })
   })
 
   it('activates through the real Loader after mounting remote.xiangqi', async () => {
